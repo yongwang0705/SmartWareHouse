@@ -1,0 +1,101 @@
+services:
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:17
+    container_name: scm-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: order_db
+      POSTGRES_USER: scm_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+
+    ports:
+      - "5435:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scm_user -d order_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+    networks:
+      - scm-network
+
+
+  # Order Service
+  order-service:
+    build:
+      context: ./smartwarehouse-order-service
+      dockerfile: Dockerfile
+
+    container_name: scm-order-service
+    restart: unless-stopped
+
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/order_db
+      DB_USERNAME: scm_user
+      DB_PASSWORD: ${DB_PASSWORD}
+
+    ports:
+      - "8081:8080"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    networks:
+      - scm-network
+  
+  # inventory-service:
+  inventory-service:
+    build:
+      context: ./smartwarehouse-inventory
+      dockerfile: Dockerfile
+    container_name: scm-inventory-service
+
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/inventory_db
+      DB_USERNAME: scm_user
+      DB_PASSWORD: ${DB_PASSWORD}
+
+    ports:
+      - "8082:8080"
+      
+    networks:
+      - scm-network
+      
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./smartwarehouse-gateway
+      dockerfile: Dockerfile
+
+    container_name: scm-api-gateway
+    restart: unless-stopped
+
+    ports:
+      - "8080:8080"
+
+    depends_on:
+      - order-service
+
+    networks:
+      - scm-network
+
+
+volumes:
+  postgres_data:
+
+
+networks:
+  scm-network:
+    driver: bridge
