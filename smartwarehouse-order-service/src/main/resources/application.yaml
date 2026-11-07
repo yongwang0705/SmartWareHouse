@@ -12,3 +12,9 @@ spring:
   sql:
     init:
       mode: always
+
+  grpc:
+    client:
+      channel:
+        inventory:
+          target: static://localhost:9090
