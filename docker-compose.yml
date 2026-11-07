@@ -65,7 +65,7 @@ services:
 
     ports:
       - "8082:8080"
-      
+      - "9090:9090"
     networks:
       - scm-network
       
