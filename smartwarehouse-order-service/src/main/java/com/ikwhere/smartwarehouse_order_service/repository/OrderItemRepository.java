@@ -25,16 +25,18 @@ public class OrderItemRepository {
                     rs.getBigDecimal("unit_price")
             );
 
-    public void save(OrderItem item) {
+    public OrderItem save(OrderItem item) {
 
         String sql = """
-                INSERT INTO order_items
-                (order_id, product_id, product_name, quantity, unit_price)
-                VALUES (?, ?, ?, ?, ?)
-                """;
+            INSERT INTO order_items
+            (order_id, product_id, product_name, quantity, unit_price)
+            VALUES (?, ?, ?, ?, ?)
+            RETURNING *
+            """;
 
-        jdbcTemplate.update(
+        return jdbcTemplate.queryForObject(
                 sql,
+                rowMapper,
                 item.orderId(),
                 item.productId(),
                 item.productName(),
