@@ -19,4 +19,13 @@ public class GlobalExceptionHandler {
                 "error", exception.getMessage()
         );
     }
+    @ExceptionHandler(IllegalStateException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Map<String, String> handleIllegalStateException(
+            OrderNotFoundException exception) {
+
+        return Map.of(
+                "error", exception.getMessage()
+        );
+    }
 }
