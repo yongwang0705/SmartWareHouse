@@ -5,9 +5,9 @@ spring:
   application:
     name: smartwarehouse-order-service
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5435/order_db}
-    username: scm_user
-    password: 123
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
 
   sql:
     init:
