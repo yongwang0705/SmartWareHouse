@@ -5,10 +5,11 @@ option java_package = "com.ikwhere.smartwarehouse.grpc";
 option java_outer_classname = "InventoryProto";
 
 service InventoryService {
+  rpc GetInventory (GetInventoryRequest)
+      returns (InventoryResponse);
 
-//
-
-
+  rpc ReserveStock (ReserveStockRequest)
+      returns (ReserveStockResponse);
 }
 
 message GetInventoryRequest {
