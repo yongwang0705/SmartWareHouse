@@ -17,4 +17,4 @@ spring:
     client:
       channel:
         inventory:
-          target: static://localhost:9090
+          target: static://inventory-service:9090
