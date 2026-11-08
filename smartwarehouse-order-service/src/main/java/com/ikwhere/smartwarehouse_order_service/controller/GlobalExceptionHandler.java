@@ -20,9 +20,9 @@ public class GlobalExceptionHandler {
         );
     }
     @ExceptionHandler(IllegalStateException.class)
-    @ResponseStatus(HttpStatus.NOT_FOUND)
+    @ResponseStatus(HttpStatus.CONFLICT)
     public Map<String, String> handleIllegalStateException(
-            OrderNotFoundException exception) {
+            IllegalStateException exception) {
 
         return Map.of(
                 "error", exception.getMessage()
