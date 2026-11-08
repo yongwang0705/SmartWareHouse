@@ -7,7 +7,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 @RestController
-@CrossOrigin
 @RequestMapping("/api/inventory")
 public class InventoryController {
     private final InventoryService inventoryService;
