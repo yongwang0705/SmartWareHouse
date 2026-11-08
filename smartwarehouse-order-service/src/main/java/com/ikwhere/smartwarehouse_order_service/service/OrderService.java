@@ -122,15 +122,15 @@ public class OrderService {
                                         product.unitPrice()
                                 );
 
-                                orderItemRepository.save(orderItem);
+                                OrderItem savedItem = orderItemRepository.save(orderItem);
 
                                 return new OrderItemResponse(
-                                        null,
-                                        product.productId(),
-                                        product.productName(),
-                                        item.quantity(),
-                                        product.unitPrice(),
-                                        product.unitPrice().multiply(
+                                        savedItem.id(),
+                                        savedItem.productId(),
+                                        savedItem.productName(),
+                                        savedItem.quantity(),
+                                        savedItem.unitPrice(),
+                                        savedItem.unitPrice().multiply(
                                                 BigDecimal.valueOf(item.quantity())
                                         )
                                 );
