@@ -9,12 +9,15 @@ import com.ikwhere.smartwarehouse_order_service.model.Order;
 import com.ikwhere.smartwarehouse_order_service.model.OrderItem;
 import com.ikwhere.smartwarehouse_order_service.repository.OrderItemRepository;
 import com.ikwhere.smartwarehouse_order_service.repository.OrderRepository;
+import com.ikwhere.smartwarehouse.grpc.ReleaseStockResponse;
+import java.util.ArrayList;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.ikwhere.smartwarehouse_order_service.client.InventoryGrpcClient;
 import com.ikwhere.smartwarehouse.grpc.InventoryResponse;
 import com.ikwhere.smartwarehouse.grpc.ReserveStockResponse;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -37,114 +40,200 @@ public class OrderService {
     @Transactional
     public OrderResponse createOrder(CreateOrderRequest request) {
 
-        // 1. Retrieve product information and calculate total
-//        List<ProductCatalogClient.ProductDetails> products =
-//                request.items().stream()
-//                        .map(item -> productCatalogClient.getProduct(item.productId()))
-//                        .toList();
-        // 1. Retrieve product information and check inventory
         List<ProductCatalogClient.ProductDetails> products =
-                request.items().stream()
-                        .map(item -> {
+                new ArrayList<>();
 
-                            // Get product price from Product Catalog
-                            ProductCatalogClient.ProductDetails product =
-                                    productCatalogClient.getProduct(item.productId());
+        List<OrderItemRequest> reservedItems = new ArrayList<>();
 
-                            // Get stock from Inventory Service through gRPC
-                            InventoryResponse inventory =
-                                    inventoryGrpcClient.getInventory(item.productId());
+        try {
 
-                            // Check available stock
-                            if (inventory.getAvailableQuantity() < item.quantity()) {
-                                throw new IllegalStateException(
-                                        "Insufficient stock for product: "
-                                                + item.productId()
+            // 1. Retrieve product details and check inventory
+            for (OrderItemRequest item : request.items()) {
+
+                ProductCatalogClient.ProductDetails product =
+                        productCatalogClient.getProduct(item.productId());
+
+                InventoryResponse inventory =
+                        inventoryGrpcClient.getInventory(item.productId());
+
+                if (inventory.getAvailableQuantity() < item.quantity()) {
+                    throw new IllegalStateException(
+                            "Insufficient stock for product: " + item.productId()
+                    );
+                }
+
+                products.add(new ProductCatalogClient.ProductDetails(
+                        product.productId(),
+                        inventory.getProductName(),
+                        product.unitPrice()
+                ));
+            }
+
+            // 2. Reserve stock
+            for (OrderItemRequest item : request.items()) {
+
+                ReserveStockResponse reservation =
+                        inventoryGrpcClient.reserveStock(
+                                item.productId(),
+                                item.quantity()
+                        );
+
+                if (!reservation.getSuccess()) {
+                    throw new IllegalStateException(reservation.getMessage());
+                }
+
+                reservedItems.add(item);
+            }
+
+            // 3. Calculate total amount
+            BigDecimal totalAmount = BigDecimal.ZERO;
+
+            for (int i = 0; i < request.items().size(); i++) {
+
+                OrderItemRequest item = request.items().get(i);
+
+                BigDecimal subtotal = products.get(i).unitPrice()
+                        .multiply(BigDecimal.valueOf(item.quantity()));
+
+                totalAmount = totalAmount.add(subtotal);
+            }
+
+            // 4. Save order
+            Order order = orderRepository.save(
+                    request.customerId(),
+                    totalAmount
+            );
+
+            // 5. Save order items
+            List<OrderItemResponse> itemResponses =
+                    java.util.stream.IntStream.range(0, request.items().size())
+                            .mapToObj(i -> {
+
+                                OrderItemRequest item = request.items().get(i);
+                                ProductCatalogClient.ProductDetails product =
+                                        products.get(i);
+
+                                OrderItem orderItem = new OrderItem(
+                                        null,
+                                        order.id(),
+                                        product.productId(),
+                                        product.productName(),
+                                        item.quantity(),
+                                        product.unitPrice()
                                 );
-                            }
 
-                            // Reserve stock through gRPC
-                            ReserveStockResponse reservation =
-                                    inventoryGrpcClient.reserveStock(
-                                            item.productId(),
-                                            item.quantity()
-                                    );
+                                orderItemRepository.save(orderItem);
 
-                            if (!reservation.getSuccess()) {
-                                throw new IllegalStateException(
-                                        reservation.getMessage()
+                                return new OrderItemResponse(
+                                        null,
+                                        product.productId(),
+                                        product.productName(),
+                                        item.quantity(),
+                                        product.unitPrice(),
+                                        product.unitPrice().multiply(
+                                                BigDecimal.valueOf(item.quantity())
+                                        )
                                 );
-                            }
+                            })
+                            .toList();
 
-                            return new ProductCatalogClient.ProductDetails(
-                                    product.productId(),
-                                    inventory.getProductName(),
-                                    product.unitPrice()
-                            );
-                        })
-                        .toList();
-        BigDecimal totalAmount = BigDecimal.ZERO;
+            // 6. Return response
+            return new OrderResponse(
+                    order.id(),
+                    order.customerId(),
+                    order.status(),
+                    order.totalAmount(),
+                    order.createdAt(),
+                    itemResponses
+            );
 
-        for (int i = 0; i < request.items().size(); i++) {
-            OrderItemRequest item = request.items().get(i);
+        } catch (RuntimeException e) {
 
-            BigDecimal subtotal = products.get(i).unitPrice()
-                    .multiply(BigDecimal.valueOf(item.quantity()));
+            // 7. Compensate: release successfully reserved stock
+            for (OrderItemRequest item : reservedItems) {
+                try {
+                    inventoryGrpcClient.releaseStock(
+                            item.productId(),
+                            item.quantity()
+                    );
+                } catch (Exception compensationError) {
+                    e.addSuppressed(compensationError);
+                }
+            }
 
-            totalAmount = totalAmount.add(subtotal);
+            throw e;
+        }
+    }
+    @Transactional
+    public void cancelOrder(Long orderId) {
+
+        // 1. Find order
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new OrderNotFoundException(orderId));
+
+        // 2. Check current status
+        if ("CANCELLED".equals(order.status())) {
+            throw new IllegalStateException(
+                    "Order " + orderId + " is already cancelled"
+            );
         }
 
-        // 2. Save order header
-        Order order = orderRepository.save(
-                request.customerId(),
-                totalAmount
-        );
+        // 3. Retrieve order items
+        List<OrderItem> items =
+                orderItemRepository.findByOrderId(orderId);
 
-        // 3. Save order items
-        List<OrderItemResponse> itemResponses =
-                java.util.stream.IntStream.range(0, request.items().size())
-                        .mapToObj(i -> {
+        List<OrderItem> releasedItems = new ArrayList<>();
 
-                            OrderItemRequest item = request.items().get(i);
+        try {
 
-                            ProductCatalogClient.ProductDetails product =
-                                    products.get(i);
+            // 4. Release reserved stock through gRPC
+            for (OrderItem item : items) {
 
-                            OrderItem orderItem = new OrderItem(
-                                    null,
-                                    order.id(),
-                                    product.productId(),
-                                    product.productName(),
-                                    item.quantity(),
-                                    product.unitPrice()
+                ReleaseStockResponse response =
+                        inventoryGrpcClient.releaseStock(
+                                item.productId(),
+                                item.quantity()
+                        );
+
+                if (!response.getSuccess()) {
+                    throw new IllegalStateException(response.getMessage());
+                }
+
+                releasedItems.add(item);
+            }
+
+            // 5. Update order status
+            int updated = orderRepository.updateStatus(orderId, "CANCELLED");
+
+            if (updated != 1) {
+                throw new IllegalStateException(
+                        "Could not cancel order: " + orderId
+                );
+            }
+
+        } catch (RuntimeException e) {
+
+            // 6. Compensation: restore reservations if cancellation fails
+            for (OrderItem item : releasedItems) {
+                try {
+                    ReserveStockResponse response =
+                            inventoryGrpcClient.reserveStock(
+                                    item.productId(),
+                                    item.quantity()
                             );
 
-                            OrderItem savedItem = orderItemRepository.save(orderItem);
+                    if (!response.getSuccess()) {
+                        throw new IllegalStateException(response.getMessage());
+                    }
 
-                            return new OrderItemResponse(
-                                    savedItem.id(),
-                                    savedItem.productId(),
-                                    savedItem.productName(),
-                                    savedItem.quantity(),
-                                    savedItem.unitPrice(),
-                                    savedItem.unitPrice().multiply(
-                                            BigDecimal.valueOf(savedItem.quantity())
-                                    )
-                            );
-                        })
-                        .toList();
+                } catch (Exception compensationError) {
+                    e.addSuppressed(compensationError);
+                }
+            }
 
-        // 4. Return response
-        return new OrderResponse(
-                order.id(),
-                order.customerId(),
-                order.status(),
-                order.totalAmount(),
-                order.createdAt(),
-                itemResponses
-        );
+            throw e;
+        }
     }
-
     // GET ALL ORDERS
     @Transactional(readOnly = true)
     public List<OrderResponse> getAllOrders() {

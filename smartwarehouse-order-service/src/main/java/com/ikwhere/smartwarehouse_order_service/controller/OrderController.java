@@ -11,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/orders")
@@ -44,5 +45,15 @@ public class OrderController {
             @PathVariable Long id
     ) {
         return ResponseEntity.ok(orderService.getOrderById(id));
+    }
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Map<String, String>> cancelOrder(
+            @PathVariable Long id
+    ) {
+        orderService.cancelOrder(id);
+
+        return ResponseEntity.ok(
+                Map.of("message", "Order cancelled successfully")
+        );
     }
 }

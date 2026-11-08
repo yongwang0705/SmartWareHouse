@@ -63,4 +63,14 @@ public class OrderRepository {
                 rowMapper
         );
     }
+    public int updateStatus(Long orderId, String status) {
+
+        String sql = """
+            UPDATE orders
+            SET status = ?
+            WHERE id = ?
+            """;
+
+        return jdbcTemplate.update(sql, status, orderId);
+    }
 }

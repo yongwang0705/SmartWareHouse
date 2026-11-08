@@ -3,6 +3,8 @@ package com.ikwhere.smartwarehouse_inventory.grpc;
 import com.ikwhere.smartwarehouse_inventory.model.Inventory;
 import com.ikwhere.smartwarehouse_inventory.service.InventoryService;
 
+import com.ikwhere.smartwarehouse.grpc.ReleaseStockRequest;
+import com.ikwhere.smartwarehouse.grpc.ReleaseStockResponse;
 import com.ikwhere.smartwarehouse.grpc.InventoryServiceGrpc;
 import com.ikwhere.smartwarehouse.grpc.GetInventoryRequest;
 import com.ikwhere.smartwarehouse.grpc.InventoryResponse;
@@ -70,6 +72,46 @@ public class InventoryGrpcService
             ReserveStockResponse response = ReserveStockResponse.newBuilder()
                     .setSuccess(false)
                     .setMessage(e.getMessage() != null ? e.getMessage() : "Stock reservation failed")
+                    .build();
+
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+        }
+    }
+
+    @Override
+    public void releaseStock(
+            ReleaseStockRequest request,
+            StreamObserver<ReleaseStockResponse> responseObserver
+    ) {
+        try {
+            inventoryService.releaseStock(
+                    request.getProductId(),
+                    request.getQuantity()
+            );
+
+            Inventory inventory = inventoryService.getInventoryByProductId(
+                    request.getProductId()
+            );
+
+            ReleaseStockResponse response = ReleaseStockResponse.newBuilder()
+                    .setSuccess(true)
+                    .setMessage("Stock released successfully")
+                    .setAvailableQuantity(inventory.getAvailableQuantity())
+                    .build();
+
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+
+        } catch (Exception e) {
+
+            ReleaseStockResponse response = ReleaseStockResponse.newBuilder()
+                    .setSuccess(false)
+                    .setMessage(
+                            e.getMessage() != null
+                                    ? e.getMessage()
+                                    : "Stock release failed"
+                    )
                     .build();
 
             responseObserver.onNext(response);

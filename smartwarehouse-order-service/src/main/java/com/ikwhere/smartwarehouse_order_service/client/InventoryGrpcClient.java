@@ -5,7 +5,8 @@ import com.ikwhere.smartwarehouse.grpc.GetInventoryRequest;
 import com.ikwhere.smartwarehouse.grpc.InventoryResponse;
 import com.ikwhere.smartwarehouse.grpc.ReserveStockRequest;
 import com.ikwhere.smartwarehouse.grpc.ReserveStockResponse;
-
+import com.ikwhere.smartwarehouse.grpc.ReleaseStockRequest;
+import com.ikwhere.smartwarehouse.grpc.ReleaseStockResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.grpc.client.GrpcChannelFactory;
 
@@ -36,5 +37,15 @@ public class InventoryGrpcClient {
                 .build();
 
         return inventoryStub.reserveStock(request);
+    }
+
+    public ReleaseStockResponse releaseStock(Long productId, Integer quantity) {
+
+        ReleaseStockRequest request = ReleaseStockRequest.newBuilder()
+                .setProductId(productId)
+                .setQuantity(quantity)
+                .build();
+
+        return inventoryStub.releaseStock(request);
     }
 }
