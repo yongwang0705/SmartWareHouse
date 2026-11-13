@@ -18,3 +18,4 @@ spring:
       channel:
         inventory:
           target: static://inventory-service:9090
+#          target: static://localhost:9090

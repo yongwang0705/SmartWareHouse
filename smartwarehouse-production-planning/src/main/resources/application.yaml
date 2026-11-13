@@ -1,0 +1,24 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: smartwarehouse-production-planning
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5435/production_db}
+    username: ${DB_USERNAME:scm_user}
+    password: ${DB_PASSWORD:scm_password}
+
+  sql:
+    init:
+      mode: always
+
+  grpc:
+    server:
+      port: 9091
+    client:
+      channel:
+        order-service:
+          target: static://order-service:9090
+        inventory-service:
+          target: static://inventory-service:9090

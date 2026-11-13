@@ -10,6 +10,8 @@ import StatCard from './components/StatCard';
 import OrderModal from './components/OrderModal';
 import { api } from './services/api';
 import type { InventoryItem, Order } from './types';
+import ProductionPage from './pages/ProductionPage';
+import BOMPage from './pages/BOMPage';
 
 const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   dashboard: { title: 'Overview', subtitle: 'Here is what is happening across your warehouse today.' },
@@ -18,6 +20,8 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   products: { title: 'Products', subtitle: 'Your product catalog, sourced from inventory records.' },
   warehouses: { title: 'Warehouses', subtitle: 'Warehouse locations and stock distribution.' },
   suppliers: { title: 'Suppliers', subtitle: 'Supplier management and procurement workspace.' },
+  production: { title: 'Production', subtitle: 'Work Orders, BOM and Kanban signals' },
+  bom: { title: 'Bill of Materials', subtitle: 'Material structure and manufacturing components' },
 };
 
 const money = (amount: number) => new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 2 }).format(Number(amount || 0));
@@ -148,7 +152,7 @@ export default function App() {
     <div className="page-toolbar"><div><h2>{page === 'inventory' ? 'Inventory levels' : 'Product catalog'}</h2><p>{page === 'inventory' ? 'Monitor on-hand, reserved and available quantities.' : 'Products currently registered in your inventory service.'}</p></div><button className="button button-secondary" onClick={() => void loadData(true)}><FontAwesomeIcon icon={faRotate} /> Refresh data</button></div>
     <div className="stats-grid stats-grid-small"><StatCard label="TOTAL PRODUCTS" value={String(inventory.length)} detail="Registered SKUs" icon={faBoxesStacked} tone="blue" /><StatCard label="TOTAL UNITS" value={totalUnits.toLocaleString('en-CA')} detail="Across all products" icon={faWarehouse} tone="green" /><StatCard label="RESERVED UNITS" value={String(inventory.reduce((sum, item) => sum + item.reservedQuantity, 0))} detail="Allocated to orders" icon={faClipboardList} tone="violet" /><StatCard label="LOW STOCK" value={String(lowStock)} detail="10 or fewer available" icon={faCircleExclamation} tone="amber" /></div>
     {renderInventory(false)}
-  </> : <div className="coming-soon-card"><div className="coming-soon-icon"><FontAwesomeIcon icon={page === 'warehouses' ? faWarehouse : faTruckFast} /></div><span className="eyebrow">COMING NEXT</span><h2>{page === 'warehouses' ? 'Warehouse management' : 'Supplier management'}</h2><p>This section is part of the planned SmartWarehouse roadmap. The current backend exposes order and inventory operations; this module can be connected when its service is ready.</p><button className="button button-secondary" onClick={() => setPage('dashboard')}>Back to dashboard</button></div>;
+  </> : page === 'production' ? <ProductionPage /> : page === 'bom' ? <BOMPage /> : <div className="coming-soon-card"><div className="coming-soon-icon"><FontAwesomeIcon icon={page === 'warehouses' ? faWarehouse : faTruckFast} /></div><span className="eyebrow">COMING NEXT</span><h2>{page === 'warehouses' ? 'Warehouse management' : 'Supplier management'}</h2><p>This section is part of the planned SmartWarehouse roadmap. The current backend exposes order and inventory operations; this module can be connected when its service is ready.</p><button className="button button-secondary" onClick={() => setPage('dashboard')}>Back to dashboard</button></div>;
 
   return <div className="app-shell">
     <Sidebar page={page} onNavigate={setPage} open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />

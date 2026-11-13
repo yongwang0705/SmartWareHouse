@@ -22,6 +22,11 @@ public class InventoryService {
     }
 
     @Transactional(readOnly = true)
+    public List<com.ikwhere.smartwarehouse_inventory.dto.BomItemResponse> getBOM() {
+        return inventoryRepository.getBOM();
+    }
+
+    @Transactional(readOnly = true)
     public Inventory getInventoryByProductId(Long productId) {
         return inventoryRepository.findByProductId(productId)
                 .orElseThrow(() ->

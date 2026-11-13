@@ -84,4 +84,26 @@ public class InventoryRepository {
                 requestedQuantity
         ) == 1;
     }
+
+    public List<com.ikwhere.smartwarehouse_inventory.dto.BomItemResponse> getBOM() {
+        String sql = """
+                SELECT b.parent_product_id, p1.product_name AS parent_product_name,
+                       b.component_product_id, p2.product_name AS component_product_name,
+                       b.quantity_required
+                FROM product_bom b
+                JOIN inventory p1 ON b.parent_product_id = p1.product_id
+                JOIN inventory p2 ON b.component_product_id = p2.product_id
+                ORDER BY b.parent_product_id, b.component_product_id
+                """;
+
+        return jdbcTemplate.query(sql, (rs, rowNum) ->
+                new com.ikwhere.smartwarehouse_inventory.dto.BomItemResponse(
+                        rs.getLong("parent_product_id"),
+                        rs.getString("parent_product_name"),
+                        rs.getLong("component_product_id"),
+                        rs.getString("component_product_name"),
+                        rs.getInt("quantity_required")
+                )
+        );
+    }
 }

@@ -30,3 +30,20 @@ export interface CreateOrderRequest {
   customerId: number;
   items: Array<{ productId: number; quantity: number }>;
 }
+
+export interface ProductionWorkOrder {
+  workOrderId: number;
+  productId: number;
+  quantity: number;
+  status: string;
+  createdAt: string;
+  completedAt?: string;
+}
+
+export interface BOMItem {
+  parentProductId: number;
+  parentProductName: string;
+  componentProductId: number;
+  componentProductName: string;
+  quantityRequired: number;
+}

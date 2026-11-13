@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "com.ikwhere.smartwarehouse.grpc";
+option java_outer_classname = "OrderProto";
+
+service OrderService {
+  rpc GetPendingProductionOrders (GetPendingProductionOrdersRequest)
+      returns (GetPendingProductionOrdersResponse);
+
+  rpc UpdateProductionStatus (UpdateProductionStatusRequest)
+      returns (UpdateProductionStatusResponse);
+}
+
+message GetPendingProductionOrdersRequest {
+  string planning_start = 1;
+  string planning_end = 2;
+}
+
+message OrderItemDto {
+  int64 product_id = 1;
+  string product_name = 2;
+  int32 quantity = 3;
+}
+
+message ProductionOrderDto {
+  int64 order_id = 1;
+  int64 customer_id = 2;
+  string status = 3;
+  string created_at = 4;
+  repeated OrderItemDto items = 5;
+}
+
+message GetPendingProductionOrdersResponse {
+  repeated ProductionOrderDto orders = 1;
+}
+
+message UpdateProductionStatusRequest {
+  int64 order_id = 1;
+  string production_status = 2;
+}
+
+message UpdateProductionStatusResponse {
+  bool success = 1;
+  string message = 2;
+}

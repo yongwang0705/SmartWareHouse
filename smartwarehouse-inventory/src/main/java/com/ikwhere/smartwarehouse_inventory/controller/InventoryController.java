@@ -20,6 +20,11 @@ public class InventoryController {
         return ResponseEntity.ok(inventoryService.getAllInventory());
     }
 
+    @GetMapping("/bom")
+    public ResponseEntity<List<com.ikwhere.smartwarehouse_inventory.dto.BomItemResponse>> getBOM() {
+        return ResponseEntity.ok(inventoryService.getBOM());
+    }
+
     @GetMapping("/{productId}")
     public ResponseEntity<Inventory> getInventoryByProductId(
             @PathVariable Long productId) {

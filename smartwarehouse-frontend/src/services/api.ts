@@ -1,4 +1,4 @@
-import type { CreateOrderRequest, InventoryItem, Order } from '../types';
+import type { BOMItem, CreateOrderRequest, InventoryItem, Order } from '../types';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
@@ -35,4 +35,5 @@ export const api = {
   cancelOrder: (id: number) =>
     request<{ message?: string }>(`/api/orders/${id}`, { method: 'DELETE' }),
   getInventory: () => request<InventoryItem[]>('/api/inventory'),
+  getBOM: () => request<BOMItem[]>('/api/inventory/bom'),
 };

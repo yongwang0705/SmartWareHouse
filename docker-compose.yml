@@ -73,11 +73,25 @@ services:
       postgres:
         condition: service_healthy
 
-  # API Gateway
-  api-gateway:
+  # Production Planning Service
+  production-planning:
     build:
-      context: ./smartwarehouse-gateway
+      context: ./smartwarehouse-production-planning
       dockerfile: Dockerfile
+    container_name: scm-production-planning
+    restart: unless-stopped
+    environment:
+      DB_URL: ${PRODUCTION_DB_URL}
+      DB_USERNAME: ${POSTGRES_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "8083:8083"
+      - "9091:9091"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - scm-network
 
     container_name: scm-api-gateway
     restart: unless-stopped

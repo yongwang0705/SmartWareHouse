@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "com.ikwhere.smartwarehouse.grpc";
+option java_outer_classname = "InventoryProto";
+
+service InventoryService {
+  rpc GetInventory (GetInventoryRequest)
+      returns (InventoryResponse);
+
+  rpc ReserveStock (ReserveStockRequest)
+      returns (ReserveStockResponse);
+
+  rpc ReleaseStock (ReleaseStockRequest)
+      returns (ReleaseStockResponse);
+
+  rpc GetInventoryBatch (GetInventoryBatchRequest)
+      returns (GetInventoryBatchResponse);
+
+  rpc ReserveMaterials (ReserveMaterialsRequest)
+      returns (ReserveMaterialsResponse);
+
+  rpc ReleaseMaterials (ReleaseMaterialsRequest)
+      returns (ReleaseMaterialsResponse);
+}
+
+message ReleaseStockRequest {
+  int64 product_id = 1;
+  int32 quantity = 2;
+}
+
+message ReleaseStockResponse {
+  bool success = 1;
+  string message = 2;
+  int32 available_quantity = 3;
+}
+
+message GetInventoryRequest {
+  int64 product_id = 1;
+}
+
+message InventoryResponse {
+  int64 product_id = 1;
+  string product_name = 2;
+  int32 quantity = 3;
+  int32 reserved_quantity = 4;
+  int32 available_quantity = 5;
+}
+
+message ReserveStockRequest {
+  int64 product_id = 1;
+  int32 quantity = 2;
+}
+
+message ReserveStockResponse {
+  bool success = 1;
+  string message = 2;
+  int32 available_quantity = 3;
+}
+
+message GetInventoryBatchRequest {
+  repeated int64 product_ids = 1;
+}
+
+message GetInventoryBatchResponse {
+  repeated InventoryResponse inventory = 1;
+}
+
+message MaterialReservationItem {
+  int64 product_id = 1;
+  int32 quantity = 2;
+}
+
+message ReserveMaterialsRequest {
+  string reservation_reference = 1;
+  repeated MaterialReservationItem items = 2;
+}
+
+message ReserveMaterialsResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message ReleaseMaterialsRequest {
+  string reservation_reference = 1;
+  repeated MaterialReservationItem items = 2;
+}
+
+message ReleaseMaterialsResponse {
+  bool success = 1;
+  string message = 2;
+}
