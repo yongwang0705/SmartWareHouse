@@ -20,3 +20,8 @@ spring:
               uri: http://inventory-service:8082
               predicates:
                 - Path=/api/inventory/**
+
+            - id: production-planning
+              uri: http://production-planning:8083
+              predicates:
+                - Path=/api/production/**
