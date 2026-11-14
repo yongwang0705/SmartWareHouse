@@ -1,16 +1,16 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faBoxesStacked, faChartPie, faChartBar, faClipboardList, faGear,
-  faLayerGroup, faTruckFast, faWarehouse,
+  faLayerGroup, faTableColumns, faTruckFast, faWarehouse,
 } from '@fortawesome/free-solid-svg-icons';
 
-export type Page = 'dashboard' | 'orders' | 'inventory' | 'products' | 'warehouses' | 'suppliers' | 'production' | 'bom';
+export type Page = 'dashboard' | 'orders' | 'inventory' | 'kanban' | 'warehouses' | 'suppliers' | 'production' | 'bom';
 
 const navItems: Array<{ id: Page; label: string; icon: any }> = [
   { id: 'dashboard', label: 'Dashboard', icon: faChartPie },
   { id: 'orders', label: 'Orders', icon: faClipboardList },
   { id: 'inventory', label: 'Inventory', icon: faBoxesStacked },
-  { id: 'products', label: 'Products', icon: faLayerGroup },
+  { id: 'kanban', label: 'JIT Kanban', icon: faTableColumns },
   { id: 'production', label: 'Production', icon: faChartBar },
   { id: 'bom', label: 'BOM', icon: faLayerGroup },
   { id: 'warehouses', label: 'Warehouses', icon: faWarehouse },

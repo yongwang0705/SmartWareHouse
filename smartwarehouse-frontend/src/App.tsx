@@ -12,15 +12,16 @@ import { api } from './services/api';
 import type { InventoryItem, Order } from './types';
 import ProductionPage from './pages/ProductionPage';
 import BOMPage from './pages/BOMPage';
+import KanbanPage from './pages/KanbanPage';
 
 const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   dashboard: { title: 'Overview', subtitle: 'Here is what is happening across your warehouse today.' },
   orders: { title: 'Orders', subtitle: 'Create, monitor and manage customer orders.' },
   inventory: { title: 'Inventory', subtitle: 'Track stock levels, reservations and product availability.' },
-  products: { title: 'Products', subtitle: 'Your product catalog, sourced from inventory records.' },
+  kanban: { title: 'JIT Kanban', subtitle: 'Just-in-time replenishment board for product inventory.' },
   warehouses: { title: 'Warehouses', subtitle: 'Warehouse locations and stock distribution.' },
   suppliers: { title: 'Suppliers', subtitle: 'Supplier management and procurement workspace.' },
-  production: { title: 'Production', subtitle: 'Work Orders, BOM and Kanban signals' },
+  production: { title: 'Production', subtitle: 'Plans, Gantt schedule, resources and production routings' },
   bom: { title: 'Bill of Materials', subtitle: 'Material structure and manufacturing components' },
 };
 
@@ -148,11 +149,11 @@ export default function App() {
     <div className="page-toolbar"><div><h2>Order pipeline</h2><p>Review customer orders and manage their lifecycle.</p></div><button className="button button-primary" onClick={() => setShowOrderModal(true)}><FontAwesomeIcon icon={faPlus} /> Create order</button></div>
     <div className="filter-bar"><div className="filter-tabs">{['ALL', 'CREATED', 'CONFIRMED', 'CANCELLED'].map((status) => <button key={status} className={statusFilter === status ? 'filter-active' : ''} onClick={() => setStatusFilter(status)}>{status === 'ALL' ? 'All orders' : status.charAt(0) + status.slice(1).toLowerCase()}</button>)}</div><span className="result-count">{filteredOrders.length} results</span></div>
     {renderOrders(false)}
-  </> : page === 'inventory' || page === 'products' ? <>
-    <div className="page-toolbar"><div><h2>{page === 'inventory' ? 'Inventory levels' : 'Product catalog'}</h2><p>{page === 'inventory' ? 'Monitor on-hand, reserved and available quantities.' : 'Products currently registered in your inventory service.'}</p></div><button className="button button-secondary" onClick={() => void loadData(true)}><FontAwesomeIcon icon={faRotate} /> Refresh data</button></div>
+  </> : page === 'inventory' ? <>
+    <div className="page-toolbar"><div><h2>Inventory levels</h2><p>Monitor on-hand, reserved and available quantities.</p></div><button className="button button-secondary" onClick={() => void loadData(true)}><FontAwesomeIcon icon={faRotate} /> Refresh data</button></div>
     <div className="stats-grid stats-grid-small"><StatCard label="TOTAL PRODUCTS" value={String(inventory.length)} detail="Registered SKUs" icon={faBoxesStacked} tone="blue" /><StatCard label="TOTAL UNITS" value={totalUnits.toLocaleString('en-CA')} detail="Across all products" icon={faWarehouse} tone="green" /><StatCard label="RESERVED UNITS" value={String(inventory.reduce((sum, item) => sum + item.reservedQuantity, 0))} detail="Allocated to orders" icon={faClipboardList} tone="violet" /><StatCard label="LOW STOCK" value={String(lowStock)} detail="10 or fewer available" icon={faCircleExclamation} tone="amber" /></div>
     {renderInventory(false)}
-  </> : page === 'production' ? <ProductionPage /> : page === 'bom' ? <BOMPage /> : <div className="coming-soon-card"><div className="coming-soon-icon"><FontAwesomeIcon icon={page === 'warehouses' ? faWarehouse : faTruckFast} /></div><span className="eyebrow">COMING NEXT</span><h2>{page === 'warehouses' ? 'Warehouse management' : 'Supplier management'}</h2><p>This section is part of the planned SmartWarehouse roadmap. The current backend exposes order and inventory operations; this module can be connected when its service is ready.</p><button className="button button-secondary" onClick={() => setPage('dashboard')}>Back to dashboard</button></div>;
+  </> : page === 'kanban' ? <KanbanPage /> : page === 'production' ? <ProductionPage /> : page === 'bom' ? <BOMPage /> : <div className="coming-soon-card"><div className="coming-soon-icon"><FontAwesomeIcon icon={page === 'warehouses' ? faWarehouse : faTruckFast} /></div><span className="eyebrow">COMING NEXT</span><h2>{page === 'warehouses' ? 'Warehouse management' : 'Supplier management'}</h2><p>This section is part of the planned SmartWarehouse roadmap. The current backend exposes order and inventory operations; this module can be connected when its service is ready.</p><button className="button button-secondary" onClick={() => setPage('dashboard')}>Back to dashboard</button></div>;
 
   return <div className="app-shell">
     <Sidebar page={page} onNavigate={setPage} open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />

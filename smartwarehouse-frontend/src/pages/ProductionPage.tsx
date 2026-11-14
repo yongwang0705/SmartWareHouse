@@ -1,61 +1,75 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
+import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTruckLoading } from '@fortawesome/free-solid-svg-icons';
-import { api } from '../services/api';
-import type { ProductionWorkOrder } from '../types';
+import {
+  faChartGantt, faClipboardList, faRoute, faUsersGear,
+} from '@fortawesome/free-solid-svg-icons';
+import PlanningBoard from './production/PlanningBoard';
+import GanttBoard from './production/GanttBoard';
+import ResourceManagement from './production/ResourceManagement';
+import RoutingManagement from './production/RoutingManagement';
+
+type ProductionTab = 'board' | 'gantt' | 'resources' | 'routings';
+
+const tabs: Array<{ id: ProductionTab; label: string; icon: IconDefinition; hint: string }> = [
+  {
+    id: 'board',
+    label: 'Planning board',
+    icon: faClipboardList,
+    hint: 'Generate plans, review risks and confirm production schedules.',
+  },
+  {
+    id: 'gantt',
+    label: 'Gantt chart',
+    icon: faChartGantt,
+    hint: 'Visualise scheduled operations across work centers, employees and operations.',
+  },
+  {
+    id: 'resources',
+    label: 'Resources',
+    icon: faUsersGear,
+    hint: 'Manage employees, skills, shifts, work centers and the working calendar.',
+  },
+  {
+    id: 'routings',
+    label: 'Routings',
+    icon: faRoute,
+    hint: 'Define product routings and their ordered production operations.',
+  },
+];
 
 export default function ProductionPage() {
-  const [workOrders, setWorkOrders] = useState<ProductionWorkOrder[]>([]);
-
-  const loadData = useCallback(async () => {
-    const wo = await api.getOrders();
-    setWorkOrders(
-      Array.isArray(wo) ? wo.map((o: any) => ({
-        workOrderId: o.id,
-        productId: 101,
-        quantity: o.items?.length ?? 5,
-        status: o.status === 'CREATED' ? 'IN_PROGRESS' : o.status,
-        createdAt: o.createdAt,
-      })) : []
-    );
-  }, []);
-
-  useEffect(() => { void loadData(); }, [loadData]);
-
-  const completeWorkOrder = async (id: number) => {
-    setWorkOrders(prev => prev.map(wo => wo.workOrderId === id ? { ...wo, status: 'COMPLETED' } : wo));
-  };
-
+  const [tab, setTab] = useState<ProductionTab>('board');
+  const active = tabs.find((item) => item.id === tab) ?? tabs[0];
 
   return (
-    <div className="page-content">
-      <h2>Production Operations</h2>
-
-      {/* 1. KANBAN SIMULATION */}
-      <div className="section-card">
-        <h3>Kanban Production Line (Real-time Simulation)</h3>
-        <div className="kanban-board" style={{ display: 'flex', gap: '20px' }}>
-          {workOrders.map(wo => (
-            <div key={wo.workOrderId} className="kanban-card" style={{ border: '1px solid #ccc', padding: '10px' }}>
-              <h4>WO #{wo.workOrderId}</h4>
-              <p>Status: <strong>{wo.status}</strong></p>
-              {wo.status === 'IN_PROGRESS' && (
-                <div className="progress-bar" style={{ height: '10px', background: '#eee' }}>
-                  <div style={{ width: '60%', background: 'green', height: '100%' }}></div>
-                </div>
-              )}
-              {wo.status === 'IN_PROGRESS' && (
-                <button onClick={() => completeWorkOrder(wo.workOrderId)} className="button">Finish Production</button>
-              )}
-              {wo.status === 'COMPLETED' && (
-                <button onClick={() => alert('Transferring to Warehouse...')} className="button button-primary">
-                  <FontAwesomeIcon icon={faTruckLoading} /> Transfer to Warehouse
-                </button>
-              )}
-            </div>
-          ))}
+    <div>
+      <div className="page-toolbar">
+        <div>
+          <h2>Production planning</h2>
+          <p>{active.hint}</p>
         </div>
       </div>
+
+      <div className="module-tabs" role="tablist" aria-label="Production planning sections">
+        {tabs.map((item) => (
+          <button
+            key={item.id}
+            role="tab"
+            aria-selected={tab === item.id}
+            className={`module-tab ${tab === item.id ? 'module-tab-active' : ''}`}
+            onClick={() => setTab(item.id)}
+          >
+            <FontAwesomeIcon icon={item.icon} />
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'board' && <PlanningBoard />}
+      {tab === 'gantt' && <GanttBoard />}
+      {tab === 'resources' && <ResourceManagement />}
+      {tab === 'routings' && <RoutingManagement />}
     </div>
   );
 }
