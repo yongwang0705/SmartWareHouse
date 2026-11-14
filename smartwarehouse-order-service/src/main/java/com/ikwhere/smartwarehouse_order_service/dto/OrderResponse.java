@@ -15,6 +15,12 @@ public record OrderResponse(
 
         LocalDateTime createdAt,
 
-        List<OrderItemResponse> items
+        List<OrderItemResponse> items,
+
+        LocalDateTime dueDate,
+
+        String priority,
+
+        String productionStatus
 ) {
 }

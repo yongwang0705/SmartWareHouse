@@ -9,6 +9,9 @@ CREATE TABLE IF NOT EXISTS production_plan (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+ALTER TABLE production_plan ADD COLUMN IF NOT EXISTS reservation_reference VARCHAR(100);
+ALTER TABLE production_plan ADD COLUMN IF NOT EXISTS failure_reason VARCHAR(1000);
+
 CREATE TABLE IF NOT EXISTS production_task (
     id BIGSERIAL PRIMARY KEY,
     plan_id BIGINT NOT NULL REFERENCES production_plan(id) ON DELETE CASCADE,
@@ -23,6 +26,14 @@ CREATE TABLE IF NOT EXISTS production_task (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE production_task ADD COLUMN IF NOT EXISTS estimated_completion TIMESTAMP;
+ALTER TABLE production_task ADD COLUMN IF NOT EXISTS status_reason VARCHAR(1000);
+
+CREATE INDEX IF NOT EXISTS idx_production_task_plan_id
+    ON production_task (plan_id);
+CREATE INDEX IF NOT EXISTS idx_production_task_order_id
+    ON production_task (order_id);
 
 CREATE TABLE IF NOT EXISTS product_bom (
     id BIGSERIAL PRIMARY KEY,

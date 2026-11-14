@@ -17,6 +17,7 @@ import com.ikwhere.smartwarehouse_order_service.client.InventoryGrpcClient;
 import com.ikwhere.smartwarehouse.grpc.InventoryResponse;
 import com.ikwhere.smartwarehouse.grpc.ReserveStockResponse;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -99,9 +100,19 @@ public class OrderService {
             }
 
             // 4. Save order
+            LocalDateTime dueDate = request.dueDate() != null
+                    ? request.dueDate().atTime(17, 0)
+                    : LocalDateTime.now().plusDays(7);
+
+            String priority = request.priority() != null
+                    ? request.priority().toUpperCase()
+                    : "NORMAL";
+
             Order order = orderRepository.save(
                     request.customerId(),
-                    totalAmount
+                    totalAmount,
+                    dueDate,
+                    priority
             );
 
             // 5. Save order items
@@ -144,7 +155,10 @@ public class OrderService {
                     order.status(),
                     order.totalAmount(),
                     order.createdAt(),
-                    itemResponses
+                    itemResponses,
+                    order.dueDate(),
+                    order.priority(),
+                    order.productionStatus()
             );
 
         } catch (RuntimeException e) {
@@ -285,7 +299,10 @@ public class OrderService {
                 order.status(),
                 order.totalAmount(),
                 order.createdAt(),
-                items
+                items,
+                order.dueDate(),
+                order.priority(),
+                order.productionStatus()
         );
     }
 }

@@ -8,6 +8,9 @@ public record Order(
         Long customerId,
         String status,
         BigDecimal totalAmount,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        LocalDateTime dueDate,
+        String priority,
+        String productionStatus
 ) {
 }

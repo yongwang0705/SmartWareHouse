@@ -15,6 +15,20 @@ CREATE TABLE IF NOT EXISTS inventory (
 ALTER TABLE inventory ADD COLUMN IF NOT EXISTS min_stock_level INT NOT NULL DEFAULT 5;
 ALTER TABLE inventory ADD COLUMN IF NOT EXISTS jit_enabled BOOLEAN NOT NULL DEFAULT TRUE;
 
+CREATE TABLE IF NOT EXISTS material_reservation (
+    id BIGSERIAL PRIMARY KEY,
+    reservation_reference VARCHAR(100) NOT NULL,
+    product_id BIGINT NOT NULL,
+    quantity INT NOT NULL CHECK (quantity > 0),
+    status VARCHAR(20) NOT NULL DEFAULT 'RESERVED',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    released_at TIMESTAMP,
+    CONSTRAINT uk_material_reservation UNIQUE (reservation_reference, product_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_material_reservation_reference
+    ON material_reservation (reservation_reference);
+
 CREATE TABLE IF NOT EXISTS product_bom (
     id BIGSERIAL PRIMARY KEY,
     parent_product_id BIGINT NOT NULL,

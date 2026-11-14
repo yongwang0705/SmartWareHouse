@@ -26,9 +26,16 @@ message OrderItemDto {
 message ProductionOrderDto {
   int64 order_id = 1;
   int64 customer_id = 2;
+  // Current production status: PENDING_PRODUCTION, PLANNED, IN_PRODUCTION, PRODUCTION_COMPLETED
   string status = 3;
   string created_at = 4;
   repeated OrderItemDto items = 5;
+  // ISO-8601 date (yyyy-MM-dd) the customer expects the order to be delivered
+  string due_date = 6;
+  // HIGH, NORMAL or LOW
+  string priority = 7;
+  // Order lifecycle status: CREATED, CANCELLED
+  string order_status = 8;
 }
 
 message GetPendingProductionOrdersResponse {

@@ -19,6 +19,6 @@ spring:
     client:
       channel:
         order-service:
-          target: static://order-service:9090
+          target: ${ORDER_GRPC_TARGET:static://order-service:9090}
         inventory-service:
-          target: static://inventory-service:9090
+          target: ${INVENTORY_GRPC_TARGET:static://inventory-service:9090}

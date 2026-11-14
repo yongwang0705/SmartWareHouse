@@ -19,7 +19,7 @@ services:
       - ./docker/init-dbs.sh:/docker-entrypoint-initdb.d/init-dbs.sh
 
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U scm_user -d order_db"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -43,7 +43,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
 
     ports:
-      - "8081:8080"
+      - "8081:8081"
 
     depends_on:
       postgres:
@@ -65,7 +65,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
 
     ports:
-      - "8082:8080"
+      - "8082:8082"
       - "9090:9090"
     networks:
       - scm-network
@@ -91,6 +91,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      order-service:
+        condition: service_started
+      inventory-service:
+        condition: service_started
     networks:
       - scm-network
 
@@ -105,6 +109,8 @@ services:
       - "8080:8080"
     depends_on:
       - order-service
+      - inventory-service
+      - production-planning
     networks:
       - scm-network
 

@@ -84,7 +84,8 @@ sequenceDiagram
 | API Gateway | Entry point for client HTTP requests and routing to backend services. |
 | Order Service | Validates order requests, calculates totals, requests stock reservation, and persists orders and order items. |
 | Inventory Service | Provides inventory queries and gRPC stock-reservation operations; tracks total, reserved, and available quantities. |
-| PostgreSQL | Stores order data and inventory data in separate databases. |
+| Production Planning Service | Generates deterministic production plans from pending orders, BOMs, routings, work centers, employees and working calendars; reserves materials on confirmation. |
+| PostgreSQL | Stores order, inventory and production-planning data in separate databases. |
 | Docker Compose | Starts the application containers and database for local development. |
 
 ### Inventory calculation
@@ -163,7 +164,14 @@ DB_PASSWORD=change_me
 
 ORDER_DB_URL=jdbc:postgresql://postgres:5432/order_db
 INVENTORY_DB_URL=jdbc:postgresql://postgres:5432/inventory_db
+PRODUCTION_DB_URL=jdbc:postgresql://postgres:5432/production_db
 ```
+
+The PostgreSQL container creates `inventory_db` and `production_db` on first
+initialization through `docker/init-dbs.sh`. If you reuse a PostgreSQL volume
+created before the Production Planning Service was added, the databases will
+not exist yet. Either create them manually or reset the development volume with
+`docker compose down -v` (this deletes local database data).
 
 The example above illustrates the database credentials and Docker-internal JDBC URLs used by this project. Your Compose file may define additional variables or use separate database initialization settings; keep those names and values consistent. Do not commit real passwords or production secrets.
 
@@ -235,6 +243,8 @@ The following are the host ports used in the current development setup. If your 
 | Order Service | `http://localhost:8081` | Order REST API |
 | Inventory Service | `http://localhost:8082` | Inventory HTTP endpoint, if enabled |
 | Inventory gRPC | `localhost:9090` | Inventory gRPC server |
+| Production Planning | `http://localhost:8083` | Production planning REST API |
+| Production Planning gRPC | `localhost:9091` | PPS gRPC server port (reserved) |
 | PostgreSQL | `localhost:5435` | Host access to PostgreSQL |
 
 Within the Compose network, use service DNS names and container ports rather than host-mapped ports.
@@ -321,12 +331,128 @@ Expected behavior:
 
 The exact HTTP status and error response depend on the exception handler configured in Order Service.
 
+### 8.5 Production planning walkthrough
+
+The Production Planning Service (PPS) owns `production_db` and never queries
+`order_db` or `inventory_db` directly. It retrieves pending orders over gRPC
+from Order Service and reads/reserves materials over gRPC from Inventory
+Service.
+
+On first start, PPS seeds a small, idempotent demonstration configuration
+(work centers, employees, skills, shifts, BOMs and routings) so the walkthrough
+below produces a real schedule. Replace or extend it through the configuration
+endpoints. To disable the seed data, delete
+`smartwarehouse-production-planning/src/main/resources/data.sql` before
+building the image.
+
+Create one or more orders (through the gateway or Order Service directly).
+The `dueDate` and `priority` fields are optional; they default to seven days
+out and `NORMAL`.
+
+```http
+POST http://localhost:8080/api/orders
+Content-Type: application/json
+
+{
+  "customerId": 5001,
+  "dueDate": "2026-11-20",
+  "priority": "HIGH",
+  "items": [
+    { "productId": 101, "quantity": 30 }
+  ]
+}
+```
+
+Generate a draft plan. Generation only calculates and persists the schedule;
+it does not reserve inventory or change order production status.
+
+```http
+POST http://localhost:8080/api/production/plans/generate
+Content-Type: application/json
+
+{
+  "planningStart": "2026-11-13",
+  "planningEnd": "2026-11-30",
+  "algorithm": "PRIORITY_EARLIEST_DUE_DATE"
+}
+```
+
+Response (abridged):
+
+```json
+{
+  "planId": 1,
+  "planNumber": "PLAN-2026-0001",
+  "status": "DRAFT",
+  "totalOrders": 1,
+  "scheduledOrders": 1,
+  "atRiskOrders": 0,
+  "materialShortageOrders": 0,
+  "capacityShortageOrders": 0
+}
+```
+
+Inspect the plan, then confirm it. Confirmation revalidates inventory,
+reserves all required materials atomically with the plan number as an
+idempotent reservation reference, and updates order production status. If any
+task has `MATERIAL_SHORTAGE` or `CAPACITY_SHORTAGE`, confirmation is rejected
+with `409 Conflict` and the plan stays `DRAFT`.
+
+```http
+GET  http://localhost:8080/api/production/plans/1
+POST http://localhost:8080/api/production/plans/1/confirm
+```
+
+Start and complete production tasks:
+
+```http
+POST http://localhost:8080/api/production/tasks/1/start
+POST http://localhost:8080/api/production/tasks/1/complete
+```
+
+Cancelling a confirmed plan releases its material reservations before the
+plan is marked `CANCELLED`. If the release call fails, the plan is not
+cancelled and the API returns `409` so the reservation is not silently
+abandoned.
+
+```http
+POST http://localhost:8080/api/production/plans/1/cancel
+```
+
+Configuration endpoints:
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET/POST | `/api/production/work-centers` | List or create work centers |
+| GET/POST | `/api/production/employees` | List or create employees |
+| POST | `/api/production/employees/{id}/skills` | Assign a skill to an employee |
+| POST | `/api/production/employees/{id}/shifts` | Configure an employee shift |
+| GET/POST | `/api/production/employees/{id}/unavailability` | Read (`?from=&to=`) or create leave periods |
+| GET/POST | `/api/production/routings` | List or create routings |
+| POST | `/api/production/routings/{id}/operations` | Add an operation to a routing |
+| GET/POST | `/api/production/bom` | Create BOM lines; `GET /bom/{productId}` reads them |
+| GET/POST | `/api/production/working-calendar` | Read (`?from=&to=`) or upsert working days |
+| GET | `/api/production/resources` | List resource assignments (`?planId=` optional) |
+
+### 8.6 Production planning tests
+
+```bash
+cd smartwarehouse-production-planning
+./mvnw test
+```
+
+`SchedulingEngineTest` covers priority ordering, due-date ordering, finished
+goods allocation, material shortages, capacity shortages, skill matching,
+double booking, work-center capacity, operation sequencing, due-date risk and
+determinism.
+
 ## 9. Database concepts
 
 The project separates order persistence from inventory persistence using two logical PostgreSQL databases:
 
 - `order_db`: stores orders and their order items.
-- `inventory_db`: stores product inventory and stock reservation information.
+- `inventory_db`: stores product inventory, stock reservations and material reservations.
+- `production_db`: stores production plans, tasks, BOMs, routings, work centers, employees and schedules.
 
 A typical order has a one-to-many relationship with order items: one order can contain multiple products. Inventory tracks the total quantity and the quantity reserved for orders. The available quantity is derived from those values.
 
