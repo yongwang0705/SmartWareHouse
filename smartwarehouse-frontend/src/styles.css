@@ -576,3 +576,14 @@
   .delivery-recommendation{flex-wrap:wrap}
   .delivery-recommendation-price{margin-left:38px}
 }
+
+/* Shipped is a terminal order state, distinct from completed/awaiting shipment. */
+.status-shipped{background:#e7f1ff;color:#2f6cb3}
+
+/* Quantity-first emphasis: units are the primary metric; money is secondary. */
+.quantity-cell strong{font-size:11px;color:#172033}
+.qty-strong{color:#172033;font-weight:800}
+.detail-item-price{font-size:8px;color:#98a2b1;font-weight:600;white-space:nowrap}
+.detail-value-note{display:flex;justify-content:flex-end;padding-top:6px;font-size:8px;color:#98a2b1}
+.delivery-recommendation-price{font-size:11px;font-weight:700;color:#64748b}
+.delivery-option-stats>div:last-child strong{font-size:8.5px;color:#3d4a5e}

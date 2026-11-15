@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
-  faArrowsRotate, faBoxesStacked, faCircleExclamation, faClipboardList,
-  faSackDollar, faTriangleExclamation,
+  faArrowsRotate, faBox, faBoxesStacked, faCircleExclamation,
+  faClipboardList, faTriangleExclamation,
 } from '@fortawesome/free-solid-svg-icons';
 import StatCard from '../components/StatCard';
 import { api } from '../services/api';
@@ -111,8 +111,17 @@ export default function DashboardPage({
   const totalRevenue = orders
     .filter((order) => order.status?.toUpperCase() !== 'CANCELLED')
     .reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
+  const totalOrderedUnits = orders
+    .filter((order) => order.status?.toUpperCase() !== 'CANCELLED')
+    .reduce(
+      (sum, order) => sum + (order.items ?? []).reduce(
+        (lineSum, item) => lineSum + Number(item.quantity || 0),
+        0,
+      ),
+      0,
+    );
   const activeOrders = orders.filter(
-    (order) => !['CANCELLED', 'COMPLETED'].includes(
+    (order) => !['CANCELLED', 'COMPLETED', 'SHIPPED'].includes(
       String(order.status).toUpperCase(),
     ),
   ).length;
@@ -297,10 +306,10 @@ export default function DashboardPage({
           tone="green"
         />
         <StatCard
-          label="ORDER VALUE"
-          value={money(totalRevenue)}
-          detail="Excluding cancelled orders"
-          icon={faSackDollar}
+          label="ORDERED UNITS"
+          value={totalOrderedUnits.toLocaleString('en-CA')}
+          detail={`Value: ${money(totalRevenue)}`}
+          icon={faBox}
           tone="violet"
         />
         <StatCard
@@ -384,7 +393,7 @@ export default function DashboardPage({
                             className="mini-button mini-button-success"
                             onClick={() => onOpenOrder(order)}
                           >
-                            Arrange delivery
+                            Complete order
                           </button>
                         )}
                       </div>

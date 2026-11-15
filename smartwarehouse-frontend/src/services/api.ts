@@ -48,8 +48,10 @@ export const api = {
     post<Order>('/api/orders', payload),
   confirmOrder: (id: number) =>
     post<Order>(`/api/orders/${id}/confirm`),
-  completeOrder: (id: number, delivery?: DeliverySelection) =>
-    post<Order>(`/api/orders/${id}/complete`, delivery),
+  completeOrder: (id: number) =>
+    post<Order>(`/api/orders/${id}/complete`),
+  shipOrder: (id: number, delivery: DeliverySelection) =>
+    post<Order>(`/api/orders/${id}/ship`, delivery),
   cancelOrder: (id: number) =>
     request<{ message?: string }>(`/api/orders/${id}`, { method: 'DELETE' }),
 

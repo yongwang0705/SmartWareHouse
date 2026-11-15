@@ -180,7 +180,7 @@ export default function DeliveryPlanner({ order, onChange }: Props) {
 
       <p className="delivery-disclaimer">
         {selected
-          ? <>Your choice: <strong>{selected.label} via {selected.carrier}</strong> · {money(selected.price)} · {selected.transitDays} day{selected.transitDays === 1 ? '' : 's'} transit.</>
+          ? <>Your choice: <strong>{selected.label} via {selected.carrier}</strong> · {selected.transitDays} day{selected.transitDays === 1 ? '' : 's'} transit · {money(selected.price)}.</>
           : 'Select an available delivery option to continue.'}
         {' '}Quotes are estimates in CAD and you make the final choice.
       </p>
@@ -199,7 +199,7 @@ export function DeliveryReceipt({ order }: { order: Order }) {
 
   return (
     <div className="delivery-receipt">
-      <div className="form-section-title"><span>DELIVERY BOOKED</span><span>{order.deliveredAt ? 'Completed' : '—'}</span></div>
+      <div className="form-section-title"><span>SHIPPED WITH</span><span>{order.deliveredAt ? 'Shipped' : '—'}</span></div>
       <div className="delivery-receipt-grid">
         <div><small>MODE</small><strong>{quote}</strong></div>
         <div><small>CARRIER</small><strong>{order.deliveryCarrier || '—'}</strong></div>
@@ -208,6 +208,7 @@ export function DeliveryReceipt({ order }: { order: Order }) {
         <div><small>TRANSIT</small><strong>{order.deliveryTransitDays != null ? `${order.deliveryTransitDays} days` : '—'}</strong></div>
         <div><small>CAPACITY</small><strong>{order.deliveryContainer || '—'}</strong></div>
         <div><small>DELIVERY COST</small><strong>{order.deliveryPrice != null ? money(Number(order.deliveryPrice)) : '—'}</strong></div>
+        <div><small>SHIPPED AT</small><strong>{order.deliveredAt ? new Date(order.deliveredAt).toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short' }) : '—'}</strong></div>
       </div>
     </div>
   );
