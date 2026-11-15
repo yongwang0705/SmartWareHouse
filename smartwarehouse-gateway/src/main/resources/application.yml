@@ -25,3 +25,38 @@ spring:
               uri: http://production-planning:8083
               predicates:
                 - Path=/api/production/**
+
+            # Proxy each service's OpenAPI document so the aggregated
+            # Swagger UI can load them from the gateway origin.
+            - id: order-openapi
+              uri: http://order-service:8081
+              predicates:
+                - Path=/openapi/order-service
+              filters:
+                - SetPath=/v3/api-docs
+
+            - id: inventory-openapi
+              uri: http://inventory-service:8082
+              predicates:
+                - Path=/openapi/inventory-service
+              filters:
+                - SetPath=/v3/api-docs
+
+            - id: production-openapi
+              uri: http://production-planning:8083
+              predicates:
+                - Path=/openapi/production-planning
+              filters:
+                - SetPath=/v3/api-docs
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    disable-swagger-default-url: true
+    urls:
+      - name: Order Service
+        url: /openapi/order-service
+      - name: Inventory Service
+        url: /openapi/inventory-service
+      - name: Production Planning
+        url: /openapi/production-planning

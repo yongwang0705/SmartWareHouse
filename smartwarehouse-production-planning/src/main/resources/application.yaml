@@ -13,12 +13,17 @@ spring:
     init:
       mode: always
 
+  # PPS is a gRPC client only: it calls Order Service and Inventory Service.
   grpc:
-    server:
-      port: 9091
     client:
       channel:
         order-service:
           target: ${ORDER_GRPC_TARGET:static://order-service:9090}
         inventory-service:
           target: ${INVENTORY_GRPC_TARGET:static://inventory-service:9090}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html

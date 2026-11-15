@@ -79,7 +79,7 @@ flowchart TB
     GW[API Gateway<br/>Spring Cloud Gateway :8080]
     ORD[Order Service<br/>REST :8081 · gRPC server :9090]
     INV[Inventory Service<br/>REST :8082 · gRPC server :9090]
-    PPS[Production Planning<br/>REST :8083 · gRPC server :9091]
+    PPS[Production Planning<br/>REST :8083 · gRPC client]
     PG[(PostgreSQL 17<br/>order_db · inventory_db · production_db)]
 
     UI -->|HTTP /api/**| GW
@@ -348,7 +348,8 @@ seaport destinations and truck freight for longer US lanes.
 | Java 17 | Language and target version. Docker images run on Temurin 21. |
 | Spring Boot 4.x | Application framework, configuration, validation and JDBC. |
 | Spring Cloud Gateway (WebFlux) | API Gateway and path-based routing. |
-| Spring gRPC starters | gRPC server/client integration and channel configuration. |
+| Spring gRPC starters | gRPC server/client integration, channel configuration and reflection. |
+| Springdoc OpenAPI 3.2 + Swagger UI | Generated REST API specs, per-service Swagger UI and an aggregated gateway UI. |
 | Protocol Buffers | Typed gRPC contracts in `.proto` files. |
 | Spring JDBC / `JdbcTemplate` | SQL execution and row mapping without JPA. |
 | PostgreSQL 17 | Persistence for all three service databases. |
@@ -426,6 +427,13 @@ service then runs its `schema.sql` and seed `data.sql` on startup.
 > the new databases will not exist. Create them manually or reset the development
 > volume with `docker compose down -v` (this deletes local data).
 
+API documentation is available once the services are up:
+
+- Aggregated Swagger UI: <http://localhost:8080/swagger-ui.html>
+- Per-service Swagger UI: ports `8081` (orders), `8082` (inventory) and `8083` (production)
+- gRPC reflection is enabled on the Inventory and Order gRPC servers; try
+  `grpcurl -plaintext localhost:9090 list`.
+
 ### Step 3 — Start the frontend
 
 ```bash
@@ -466,7 +474,7 @@ cd smartwarehouse-order-service
 DB_URL=jdbc:postgresql://localhost:5435/order_db DB_USERNAME=scm_user DB_PASSWORD=change_me \
   ./mvnw spring-boot:run -Dspring-boot.run.arguments=--spring.grpc.client.channel.inventory.target=static://localhost:9090
 
-# Production planning (REST 8083, gRPC 9091)
+# Production planning (REST 8083; gRPC client only)
 cd smartwarehouse-production-planning
 DB_URL=jdbc:postgresql://localhost:5435/production_db DB_USERNAME=scm_user DB_PASSWORD=change_me \
   ORDER_GRPC_TARGET=static://localhost:9090 INVENTORY_GRPC_TARGET=static://localhost:9090 \
@@ -480,12 +488,11 @@ DB_URL=jdbc:postgresql://localhost:5435/production_db DB_USERNAME=scm_user DB_PA
 | Component | Host address | Purpose |
 |---|---|---|
 | Frontend (Vite) | `http://localhost:5173` | Operations console |
-| API Gateway | `http://localhost:8080` | Client HTTP entry point |
-| Order Service | `http://localhost:8081` | Order REST API |
-| Inventory Service | `http://localhost:8082` | Inventory REST API |
+| API Gateway | `http://localhost:8080` | Client HTTP entry point and aggregated Swagger UI |
+| Order Service | `http://localhost:8081` | Order REST API and Swagger UI |
+| Inventory Service | `http://localhost:8082` | Inventory REST API and Swagger UI |
 | Inventory gRPC | `localhost:9090` | Inventory gRPC server |
-| Production Planning | `http://localhost:8083` | Planning REST API |
-| Production gRPC | `localhost:9091` | PPS gRPC server |
+| Production Planning | `http://localhost:8083` | Planning REST API and Swagger UI |
 | PostgreSQL | `localhost:5435` | Host access to PostgreSQL |
 
 ### Inside the Compose network
@@ -721,15 +728,53 @@ Order Service — `OrderService`:
 | `GetOrderRequirements` | Ordered quantities, used to decide when production is complete. |
 | `UpdateProductionStatus` | PPS-driven status updates (`PLANNED`, `IN_PRODUCTION`, `PRODUCTION_COMPLETED`, ...). |
 
-Test Inventory gRPC from the host (passing the proto avoids relying on server reflection):
+### 11.5 OpenAPI and Swagger UI
+
+Every REST service publishes an OpenAPI 3.1 document and a Swagger UI:
+
+| Service | Swagger UI | OpenAPI JSON |
+|---|---|---|
+| Aggregated (gateway) | `http://localhost:8080/swagger-ui.html` | `http://localhost:8080/v3/api-docs` |
+| Order Service | `http://localhost:8081/swagger-ui.html` | `http://localhost:8081/v3/api-docs` |
+| Inventory Service | `http://localhost:8082/swagger-ui.html` | `http://localhost:8082/v3/api-docs` |
+| Production Planning | `http://localhost:8083/swagger-ui.html` | `http://localhost:8083/v3/api-docs` |
+
+The gateway UI is an aggregator: its service selector loads each spec through the
+gateway itself (`/openapi/order-service`, `/openapi/inventory-service`,
+`/openapi/production-planning`), so the same-origin requests work without extra CORS
+configuration. Each spec declares `servers: ["/"]`, which means "Try it out" sends
+requests to the origin that served the UI — the gateway when using port 8080, or the
+service itself when using a direct service UI.
+
+Both Swagger UI and the OpenAPI endpoint are enabled for development. Disable them in
+a production deployment with `springdoc.swagger-ui.enabled=false` and
+`springdoc.api-docs.enabled=false`.
+
+### 11.6 gRPC reflection
+
+Reflection is enabled explicitly on the Order and Inventory gRPC servers
+(`spring.grpc.server.reflection.enabled=true`). Clients can therefore discover
+services and messages without a local copy of the `.proto` files. PPS is a gRPC
+client only and does not expose a gRPC server. Set
+`spring.grpc.server.reflection.enabled=false` in production if contract discovery
+should not be exposed.
+
+The Inventory gRPC server is published on the host:
 
 ```bash
-grpcurl -plaintext \
-  -import-path smartwarehouse-inventory/src/main/proto \
-  -proto inventory.proto \
-  -d '{"productId":"101"}' \
+# List services exposed by Inventory
+grpcurl -plaintext localhost:9090 list
+
+# Inspect the InventoryService contract
+grpcurl -plaintext localhost:9090 describe InventoryService
+
+# Call an RPC without passing a proto file
+grpcurl -plaintext -d '{"productId":"101"}' \
   localhost:9090 InventoryService/GetInventory
 ```
+
+The Order gRPC server is only reachable inside the Compose network (for example from
+the PPS container at `order-service:9090`); its port is not published to the host.
 
 A successful reservation changes stock — use `ReserveStock`/`ReserveMaterials`
 carefully when experimenting.
@@ -892,6 +937,8 @@ npm run build
 | Port already allocated | Change the host-side mapping or stop the conflicting process. |
 | Changes not reflected | Rebuild with `docker compose up -d --build --no-deps <service>`. |
 | gRPC HTTP/2 or TLS error | Use plaintext for local calls (`grpcurl -plaintext`) and matching channel configuration. |
+| Swagger UI loads but shows no operations | Pick a service from the selector; the gateway spec itself has no paths. Ensure the selected service is running. |
+| `grpcurl` cannot list services | Reflection exists on the Order and Inventory gRPC servers only. PPS is a gRPC client, and Order's port `9090` is not published to the host. |
 | Frontend cannot reach the API | Confirm the gateway is on `8080` and `VITE_API_BASE_URL`/the Vite proxy target is correct. |
 
 ## 18. Current limitations and roadmap
@@ -906,12 +953,10 @@ Known limitations of this demonstration:
 - Inter-service failure handling relies on compensation, not sagas/outbox/event streaming.
 - The Suppliers page is a roadmap placeholder; procurement tables have no API.
 - The line-based scheduler is the active path; operation/employee-level resource assignment is retained but not used for plan generation.
-- No OpenAPI documentation or gRPC reflection is enabled yet.
 
 Possible next steps:
 
 - Add authentication and rate limiting at the gateway.
-- Publish OpenAPI and enable gRPC reflection.
 - Add Testcontainers integration tests and CI pipelines.
 - Introduce event-driven integration (outbox + message broker) and idempotency keys.
 - Replace demo delivery quotes with carrier APIs and real tracking.

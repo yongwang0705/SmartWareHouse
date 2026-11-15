@@ -87,7 +87,6 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
     ports:
       - "8083:8083"
-      - "9091:9091"
     depends_on:
       postgres:
         condition: service_healthy
