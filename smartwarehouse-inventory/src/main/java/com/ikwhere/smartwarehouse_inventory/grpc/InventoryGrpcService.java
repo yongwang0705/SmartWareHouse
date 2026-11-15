@@ -3,6 +3,10 @@ package com.ikwhere.smartwarehouse_inventory.grpc;
 import com.ikwhere.smartwarehouse_inventory.model.Inventory;
 import com.ikwhere.smartwarehouse_inventory.service.InventoryService;
 
+import com.ikwhere.smartwarehouse.grpc.AddStockRequest;
+import com.ikwhere.smartwarehouse.grpc.AddStockResponse;
+import com.ikwhere.smartwarehouse.grpc.FulfillMaterialsRequest;
+import com.ikwhere.smartwarehouse.grpc.FulfillMaterialsResponse;
 import com.ikwhere.smartwarehouse.grpc.GetInventoryBatchRequest;
 import com.ikwhere.smartwarehouse.grpc.GetInventoryBatchResponse;
 import com.ikwhere.smartwarehouse.grpc.ReleaseStockRequest;
@@ -169,6 +173,68 @@ public class InventoryGrpcService
                     .setMessage(e.getMessage() != null
                             ? e.getMessage()
                             : "Material release failed")
+                    .build());
+            responseObserver.onCompleted();
+        }
+    }
+
+    @Override
+    public void addStock(
+            AddStockRequest request,
+            StreamObserver<AddStockResponse> responseObserver) {
+
+        try {
+            inventoryService.addStock(
+                    request.getProductId(),
+                    request.getQuantity()
+            );
+
+            Inventory inventory = inventoryService.getInventoryByProductId(
+                    request.getProductId()
+            );
+
+            responseObserver.onNext(AddStockResponse.newBuilder()
+                    .setSuccess(true)
+                    .setMessage("Stock added successfully")
+                    .setQuantity(inventory.quantity())
+                    .build());
+            responseObserver.onCompleted();
+
+        } catch (Exception e) {
+            responseObserver.onNext(AddStockResponse.newBuilder()
+                    .setSuccess(false)
+                    .setMessage(e.getMessage() != null
+                            ? e.getMessage()
+                            : "Stock addition failed")
+                    .build());
+            responseObserver.onCompleted();
+        }
+    }
+
+    @Override
+    public void fulfillMaterials(
+            FulfillMaterialsRequest request,
+            StreamObserver<FulfillMaterialsResponse> responseObserver) {
+
+        try {
+            InventoryService.BatchOperationResult result =
+                    inventoryService.fulfillMaterials(
+                            request.getReservationReference(),
+                            toQuantityMap(request.getItemsList())
+                    );
+
+            responseObserver.onNext(FulfillMaterialsResponse.newBuilder()
+                    .setSuccess(result.success())
+                    .setMessage(result.message())
+                    .build());
+            responseObserver.onCompleted();
+
+        } catch (Exception e) {
+            responseObserver.onNext(FulfillMaterialsResponse.newBuilder()
+                    .setSuccess(false)
+                    .setMessage(e.getMessage() != null
+                            ? e.getMessage()
+                            : "Material fulfilment failed")
                     .build());
             responseObserver.onCompleted();
         }

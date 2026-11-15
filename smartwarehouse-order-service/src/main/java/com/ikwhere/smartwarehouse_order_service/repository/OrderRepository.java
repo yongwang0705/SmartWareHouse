@@ -37,8 +37,10 @@ public class OrderRepository {
                       LocalDateTime dueDate, String priority) {
 
         String sql = """
-                INSERT INTO orders (customer_id, status, total_amount, due_date, priority)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO orders
+                    (customer_id, status, total_amount, due_date, priority,
+                     production_status)
+                VALUES (?, ?, ?, ?, ?, 'AWAITING_CONFIRMATION')
                 RETURNING *
                 """;
 
@@ -81,7 +83,7 @@ public class OrderRepository {
         String sql = """
                 SELECT *
                 FROM orders
-                WHERE status <> 'CANCELLED'
+                WHERE status = 'CONFIRMED'
                   AND production_status = 'PENDING_PRODUCTION'
                   AND due_date >= ?
                   AND due_date < ?
@@ -105,6 +107,32 @@ public class OrderRepository {
             """;
 
         return jdbcTemplate.update(sql, status, orderId);
+    }
+
+    public int confirmOrder(Long orderId, String productionStatus) {
+
+        String sql = """
+            UPDATE orders
+            SET status = 'CONFIRMED',
+                production_status = ?
+            WHERE id = ?
+              AND status = 'CREATED'
+            """;
+
+        return jdbcTemplate.update(sql, productionStatus, orderId);
+    }
+
+    public int completeOrder(Long orderId) {
+
+        String sql = """
+            UPDATE orders
+            SET status = 'COMPLETED',
+                production_status = 'FULFILLED'
+            WHERE id = ?
+              AND status = 'CONFIRMED'
+            """;
+
+        return jdbcTemplate.update(sql, orderId);
     }
 
     public int updateProductionStatus(Long orderId, String productionStatus) {

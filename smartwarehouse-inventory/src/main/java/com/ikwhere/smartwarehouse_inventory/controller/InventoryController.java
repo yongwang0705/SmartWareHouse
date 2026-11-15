@@ -2,6 +2,8 @@ package com.ikwhere.smartwarehouse_inventory.controller;
 
 import com.ikwhere.smartwarehouse_inventory.model.Inventory;
 import com.ikwhere.smartwarehouse_inventory.service.InventoryService;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,6 +25,27 @@ public class InventoryController {
     @GetMapping("/bom")
     public ResponseEntity<List<com.ikwhere.smartwarehouse_inventory.dto.BomItemResponse>> getBOM() {
         return ResponseEntity.ok(inventoryService.getBOM());
+    }
+
+    @GetMapping("/kanban")
+    public ResponseEntity<List<com.ikwhere.smartwarehouse_inventory.dto.KanbanBinResponse>> getKanbanBins() {
+        return ResponseEntity.ok(inventoryService.getKanbanBins());
+    }
+
+    @GetMapping("/warehouses")
+    public ResponseEntity<List<com.ikwhere.smartwarehouse_inventory.dto.WarehouseResponse>> getWarehouses() {
+        return ResponseEntity.ok(inventoryService.getWarehouses());
+    }
+
+    @PostMapping("/warehouses/{warehouseId}/plots")
+    public ResponseEntity<com.ikwhere.smartwarehouse_inventory.dto.WarehousePlotResponse>
+    createWarehousePlot(
+            @PathVariable Long warehouseId,
+            @Valid @RequestBody
+            com.ikwhere.smartwarehouse_inventory.dto.CreateWarehousePlotRequest request) {
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(inventoryService.createWarehousePlot(warehouseId, request));
     }
 
     @GetMapping("/{productId}")

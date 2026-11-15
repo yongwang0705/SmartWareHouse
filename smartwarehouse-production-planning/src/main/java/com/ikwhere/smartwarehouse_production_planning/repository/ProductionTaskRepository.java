@@ -39,7 +39,10 @@ public class ProductionTaskRepository {
                             ? null
                             : rs.getTimestamp("estimated_completion").toLocalDateTime(),
                     rs.getTimestamp("created_at").toLocalDateTime(),
-                    rs.getTimestamp("updated_at").toLocalDateTime()
+                    rs.getTimestamp("updated_at").toLocalDateTime(),
+                    rs.getTimestamp("completed_at") == null
+                            ? null
+                            : rs.getTimestamp("completed_at").toLocalDateTime()
             );
 
     public ProductionTask save(Long planId,
@@ -114,6 +117,60 @@ public class ProductionTaskRepository {
                 SET status = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                 """, status, id);
+    }
+
+    public int markCompleted(Long id) {
+        return jdbcTemplate.update("""
+                UPDATE production_task
+                SET status = 'COMPLETED',
+                    completed_at = CURRENT_TIMESTAMP,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """, id);
+    }
+
+    public int updatePlanTask(Long id,
+                              Long orderId,
+                              Long productId,
+                              Integer quantity,
+                              LocalDateTime dueDate,
+                              LocalDateTime startTime,
+                              LocalDateTime endTime,
+                              String priority,
+                              String status,
+                              LocalDateTime estimatedCompletion) {
+        return jdbcTemplate.update("""
+                UPDATE production_task
+                SET order_id = ?,
+                    product_id = ?,
+                    quantity = ?,
+                    due_date = ?,
+                    start_time = ?,
+                    end_time = ?,
+                    priority = ?,
+                    status = ?,
+                    estimated_completion = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                orderId,
+                productId,
+                quantity,
+                dueDate,
+                startTime,
+                endTime,
+                priority,
+                status,
+                estimatedCompletion,
+                id
+        );
+    }
+
+    public int deleteById(Long id) {
+        return jdbcTemplate.update(
+                "DELETE FROM production_task WHERE id = ?",
+                id
+        );
     }
 
     public void cancelByPlan(Long planId) {

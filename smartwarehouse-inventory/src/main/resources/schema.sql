@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS inventory (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     min_stock_level INT NOT NULL DEFAULT 5,
     jit_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    is_product BOOLEAN DEFAULT FALSE,
     CHECK (quantity >= 0),
     CHECK (reserved_quantity >= 0),
     CHECK (reserved_quantity <= quantity)
@@ -14,6 +15,7 @@ CREATE TABLE IF NOT EXISTS inventory (
 
 ALTER TABLE inventory ADD COLUMN IF NOT EXISTS min_stock_level INT NOT NULL DEFAULT 5;
 ALTER TABLE inventory ADD COLUMN IF NOT EXISTS jit_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS is_product BOOLEAN DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS material_reservation (
     id BIGSERIAL PRIMARY KEY,
@@ -47,6 +49,35 @@ CREATE TABLE IF NOT EXISTS kanban_bins (
     last_triggered_at TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS warehouse (
+    id BIGSERIAL PRIMARY KEY,
+    code VARCHAR(50) NOT NULL UNIQUE,
+    name VARCHAR(150) NOT NULL,
+    address VARCHAR(255),
+    surface_area NUMERIC(12, 2) NOT NULL CHECK (surface_area > 0),
+    status VARCHAR(30) NOT NULL DEFAULT 'ACTIVE',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS warehouse_plot (
+    id BIGSERIAL PRIMARY KEY,
+    warehouse_id BIGINT NOT NULL REFERENCES warehouse(id) ON DELETE CASCADE,
+    code VARCHAR(50) NOT NULL,
+    name VARCHAR(150) NOT NULL,
+    plot_type VARCHAR(30) NOT NULL DEFAULT 'RACK',
+    surface_area NUMERIC(12, 2) NOT NULL CHECK (surface_area > 0),
+    occupied_area NUMERIC(12, 2) NOT NULL DEFAULT 0
+        CHECK (occupied_area >= 0 AND occupied_area <= surface_area),
+    product_id BIGINT REFERENCES inventory(product_id) ON DELETE SET NULL,
+    capacity_units INT NOT NULL DEFAULT 0 CHECK (capacity_units >= 0),
+    occupied_units INT NOT NULL DEFAULT 0 CHECK (occupied_units >= 0),
+    CONSTRAINT uk_warehouse_plot UNIQUE (warehouse_id, code)
+);
+
+CREATE INDEX IF NOT EXISTS idx_warehouse_plot_warehouse
+    ON warehouse_plot (warehouse_id);
 
 CREATE TABLE IF NOT EXISTS production_work_orders (
     work_order_id BIGSERIAL PRIMARY KEY,

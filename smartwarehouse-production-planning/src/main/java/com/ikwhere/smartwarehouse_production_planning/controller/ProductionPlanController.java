@@ -5,6 +5,7 @@ import com.ikwhere.smartwarehouse_production_planning.dto.ConfirmPlanResponse;
 import com.ikwhere.smartwarehouse_production_planning.dto.GeneratePlanRequest;
 import com.ikwhere.smartwarehouse_production_planning.dto.PlanDetailsResponse;
 import com.ikwhere.smartwarehouse_production_planning.dto.PlanSummaryResponse;
+import com.ikwhere.smartwarehouse_production_planning.dto.ReplenishPlanRequest;
 import com.ikwhere.smartwarehouse_production_planning.service.PlanningWorkflowService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -35,6 +36,14 @@ public class ProductionPlanController {
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(planningWorkflowService.generatePlan(request));
+    }
+
+    @PostMapping("/replenish")
+    public ResponseEntity<PlanSummaryResponse> generateReplenishmentPlan(
+            @Valid @RequestBody ReplenishPlanRequest request) {
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(planningWorkflowService.generateReplenishmentPlan(request));
     }
 
     @GetMapping

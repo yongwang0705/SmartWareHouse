@@ -46,6 +46,16 @@ public class OrderController {
     ) {
         return ResponseEntity.ok(orderService.getOrderById(id));
     }
+    @PostMapping("/{id}/confirm")
+    public ResponseEntity<OrderResponse> confirmOrder(@PathVariable Long id) {
+        return ResponseEntity.ok(orderService.confirmOrder(id));
+    }
+
+    @PostMapping("/{id}/complete")
+    public ResponseEntity<OrderResponse> completeOrder(@PathVariable Long id) {
+        return ResponseEntity.ok(orderService.completeOrder(id));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Map<String, String>> cancelOrder(
             @PathVariable Long id

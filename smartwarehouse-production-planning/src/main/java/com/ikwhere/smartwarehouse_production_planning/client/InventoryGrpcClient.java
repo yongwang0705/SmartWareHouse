@@ -1,5 +1,9 @@
 package com.ikwhere.smartwarehouse_production_planning.client;
 
+import com.ikwhere.smartwarehouse.grpc.AddStockRequest;
+import com.ikwhere.smartwarehouse.grpc.AddStockResponse;
+import com.ikwhere.smartwarehouse.grpc.FulfillMaterialsRequest;
+import com.ikwhere.smartwarehouse.grpc.FulfillMaterialsResponse;
 import com.ikwhere.smartwarehouse.grpc.GetInventoryBatchRequest;
 import com.ikwhere.smartwarehouse.grpc.GetInventoryBatchResponse;
 import com.ikwhere.smartwarehouse.grpc.InventoryResponse;
@@ -77,5 +81,34 @@ public class InventoryGrpcClient {
         return inventoryStub
                 .withDeadlineAfter(DEADLINE_SECONDS, TimeUnit.SECONDS)
                 .releaseMaterials(request.build());
+    }
+
+    public AddStockResponse addStock(Long productId, Integer quantity) {
+        return inventoryStub
+                .withDeadlineAfter(DEADLINE_SECONDS, TimeUnit.SECONDS)
+                .addStock(AddStockRequest.newBuilder()
+                        .setProductId(productId)
+                        .setQuantity(quantity)
+                        .build());
+    }
+
+    public FulfillMaterialsResponse fulfillMaterials(
+            String reference,
+            Map<Long, Integer> quantities) {
+
+        FulfillMaterialsRequest.Builder request =
+                FulfillMaterialsRequest.newBuilder()
+                        .setReservationReference(reference);
+
+        quantities.forEach((productId, quantity) ->
+                request.addItems(MaterialReservationItem.newBuilder()
+                        .setProductId(productId)
+                        .setQuantity(quantity)
+                        .build())
+        );
+
+        return inventoryStub
+                .withDeadlineAfter(DEADLINE_SECONDS, TimeUnit.SECONDS)
+                .fulfillMaterials(request.build());
     }
 }

@@ -1,14 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
-  faArrowsRotate, faBell, faCalendarDays, faCircleExclamation,
+  faArrowsRotate, faBell, faBoxesStacked, faCalendarDays, faCircleExclamation,
   faClock, faGaugeHigh, faTableColumns, faTriangleExclamation,
 } from '@fortawesome/free-solid-svg-icons';
-import StatCard from '../components/StatCard';
-import { api } from '../services/api';
+import StatCard from './StatCard';
 import type { KanbanBin } from '../types';
 
-type Tone = 'healthy' | 'low' | 'reorder' | 'critical';
+type Tone = 'healthy' | 'low' | 'reorder' | 'critical' | 'over';
 
 interface Column {
   status: string;
@@ -22,6 +21,7 @@ const COLUMNS: Column[] = [
   { status: 'LOW', label: 'Low stock', hint: '50% or less of capacity', tone: 'low' },
   { status: 'REORDER', label: 'Reorder now', hint: 'At or below JIT trigger', tone: 'reorder' },
   { status: 'CRITICAL', label: 'Out of stock', hint: 'No available units', tone: 'critical' },
+  { status: 'OVERSTOCK', label: 'Over capacity', hint: 'Above bin capacity', tone: 'over' },
 ];
 
 const daysLabel = (days: number | null | undefined) => {
@@ -32,7 +32,14 @@ const daysLabel = (days: number | null | undefined) => {
 
 const percent = (value: number) => `${Math.round(Math.min(100, Math.max(0, value)))}%`;
 
-function KanbanCard({ bin, tone }: { bin: KanbanBin; tone: Tone }) {
+interface KanbanCardProps {
+  bin: KanbanBin;
+  tone: Tone;
+  replenishing: boolean;
+  onReplenish?: (bin: KanbanBin) => void;
+}
+
+function KanbanCard({ bin, tone, replenishing, onReplenish }: KanbanCardProps) {
   const width = Math.min(100, Math.max(0, bin.fillPercent));
 
   return (
@@ -42,9 +49,7 @@ function KanbanCard({ bin, tone }: { bin: KanbanBin; tone: Tone }) {
           <h4>{bin.productName}</h4>
           <span className="kanban-sku">PRD-{bin.productId} · {bin.binId}</span>
         </div>
-        <span className={`kanban-jit ${bin.jitEnabled ? '' : 'kanban-jit-off'}`}>
-          {bin.jitEnabled ? 'JIT' : 'STD'}
-        </span>
+        <span className="kanban-jit">JIT</span>
       </div>
 
       <div className="kanban-stock-row">
@@ -54,7 +59,11 @@ function KanbanCard({ bin, tone }: { bin: KanbanBin; tone: Tone }) {
             {bin.availableQuantity}<small> / {bin.capacity}</small>
           </span>
         </div>
-        <span className="kanban-fill-label">{percent(bin.fillPercent)}</span>
+        <span className="kanban-fill-label">
+          {bin.status === 'OVERSTOCK'
+            ? `+${(bin.availableQuantity - bin.capacity).toLocaleString('en-CA')} over`
+            : percent(bin.fillPercent)}
+        </span>
       </div>
 
       <div className="kanban-meter">
@@ -80,41 +89,41 @@ function KanbanCard({ bin, tone }: { bin: KanbanBin; tone: Tone }) {
           </span>
         )}
       </div>
+
+      {onReplenish && ['LOW', 'REORDER', 'CRITICAL'].includes(bin.status) && (
+        <div className="kanban-actions">
+          <button
+            type="button"
+            className="mini-button"
+            disabled={replenishing}
+            onClick={() => onReplenish(bin)}
+          >
+            <FontAwesomeIcon icon={faArrowsRotate} />
+            {replenishing ? 'Planning...' : 'Replenish to capacity'}
+          </button>
+        </div>
+      )}
     </article>
   );
 }
 
-export default function KanbanPage() {
-  const [bins, setBins] = useState<KanbanBin[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [jitOnly, setJitOnly] = useState(false);
+interface Props {
+  bins: KanbanBin[];
+  loading: boolean;
+  error: string;
+  onRetry: () => void;
+  onReplenish?: (bin: KanbanBin) => void;
+  replenishingProductId?: number | null;
+}
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const data = await api.getKanban();
-      setBins(Array.isArray(data) ? data : []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load the JIT kanban board.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { void load(); }, [load]);
-
-  const visible = useMemo(
-    () => (jitOnly ? bins.filter((bin) => bin.jitEnabled) : bins),
-    [bins, jitOnly],
-  );
-
+export default function KanbanBoard({
+  bins, loading, error, onRetry, onReplenish, replenishingProductId,
+}: Props) {
   const grouped = useMemo(() => {
     const result = new Map<string, KanbanBin[]>();
     COLUMNS.forEach((column) => result.set(column.status, []));
 
-    visible.forEach((bin) => {
+    bins.forEach((bin) => {
       const key = COLUMNS.some((column) => column.status === bin.status)
         ? bin.status
         : 'HEALTHY';
@@ -126,9 +135,9 @@ export default function KanbanPage() {
     ));
 
     return result;
-  }, [visible]);
+  }, [bins]);
 
-  const jitCount = bins.filter((bin) => bin.jitEnabled).length;
+  const totalUnits = bins.reduce((sum, bin) => sum + bin.currentStock, 0);
   const needsReplenishment = bins.filter(
     (bin) => bin.status === 'REORDER' || bin.status === 'CRITICAL',
   ).length;
@@ -141,49 +150,39 @@ export default function KanbanPage() {
 
   if (loading) {
     return (
-      <div className="page-content">
-        <div className="loading-panel">
-          <span className="spinner" />
-          <strong>Loading JIT kanban...</strong>
-          <span>Reading bin capacity and inventory positions</span>
-        </div>
+      <div className="loading-panel">
+        <span className="spinner" />
+        <strong>Loading JIT kanban...</strong>
+        <span>Reading bin capacity and inventory positions</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="alert alert-error">
+        <FontAwesomeIcon icon={faCircleExclamation} />
+        <span>{error}</span>
+        <button onClick={onRetry}>Retry</button>
       </div>
     );
   }
 
   return (
-    <div className="page-content">
-      <div className="page-toolbar">
-        <div>
-          <h2>JIT Kanban</h2>
-          <p>Just-in-time replenishment board. Products move from healthy to reorder as stock is consumed.</p>
-        </div>
-        <button className="button button-secondary" onClick={() => void load()}>
-          <FontAwesomeIcon icon={faArrowsRotate} /> Refresh
-        </button>
-      </div>
-
-      {error && (
-        <div className="alert alert-error">
-          <FontAwesomeIcon icon={faCircleExclamation} />
-          <span>{error}</span>
-          <button onClick={() => void load()}>Retry</button>
-        </div>
-      )}
-
+    <>
       <div className="stats-grid stats-grid-small">
         <StatCard
           label="KANBAN BINS"
           value={String(bins.length)}
-          detail={`${visible.length} in view`}
+          detail="JIT-enabled inventory"
           icon={faTableColumns}
           tone="blue"
         />
         <StatCard
-          label="JIT ENABLED"
-          value={String(jitCount)}
-          detail="Just-in-time replenishment"
-          icon={faGaugeHigh}
+          label="ON-HAND UNITS"
+          value={totalUnits.toLocaleString('en-CA')}
+          detail="Across JIT inventory"
+          icon={faBoxesStacked}
           tone="green"
         />
         <StatCard
@@ -203,25 +202,15 @@ export default function KanbanPage() {
       </div>
 
       <div className="kanban-toolbar">
-        <div className="segmented">
-          <button
-            className={!jitOnly ? 'segmented-active' : ''}
-            onClick={() => setJitOnly(false)}
-          >
-            All products ({bins.length})
-          </button>
-          <button
-            className={jitOnly ? 'segmented-active' : ''}
-            onClick={() => setJitOnly(true)}
-          >
-            JIT enabled ({jitCount})
-          </button>
-        </div>
+        <span className="kanban-scope">
+          <FontAwesomeIcon icon={faGaugeHigh} /> Showing JIT-enabled inventory only
+        </span>
         <span className="kanban-legend">
           <i className="kanban-dot kanban-dot-healthy" /> Healthy
           <i className="kanban-dot kanban-dot-low" /> Low
           <i className="kanban-dot kanban-dot-reorder" /> Reorder
           <i className="kanban-dot kanban-dot-critical" /> Out
+          <i className="kanban-dot kanban-dot-over" /> Over
         </span>
       </div>
 
@@ -243,7 +232,13 @@ export default function KanbanPage() {
 
               <div className="kanban-cards">
                 {items.map((bin) => (
-                  <KanbanCard key={bin.productId} bin={bin} tone={column.tone} />
+                  <KanbanCard
+                    key={bin.productId}
+                    bin={bin}
+                    tone={column.tone}
+                    replenishing={replenishingProductId === bin.productId}
+                    onReplenish={onReplenish}
+                  />
                 ))}
                 {items.length === 0 && <div className="kanban-empty">No products</div>}
               </div>
@@ -257,6 +252,6 @@ export default function KanbanPage() {
         Stock age is measured from the last inventory update. Deployed is measured from the
         kanban bin record. Reorder signals fire when available stock reaches the bin trigger level.
       </p>
-    </div>
+    </>
   );
 }

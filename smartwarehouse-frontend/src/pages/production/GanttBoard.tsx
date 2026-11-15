@@ -15,13 +15,23 @@ import type {
   Assignment, PlanDetails, PlanSummary, ProductionTask,
 } from '../../types';
 
-type GroupBy = 'workCenter' | 'employee' | 'operation';
+type GroupBy = 'line' | 'workCenter' | 'employee' | 'operation';
 
 const GROUP_LABELS: Record<GroupBy, string> = {
+  line: 'Production line',
   workCenter: 'Work center',
   employee: 'Employee',
   operation: 'Operation',
 };
+
+interface GanttItem {
+  key: string;
+  task: ProductionTask;
+  start: number;
+  end: number;
+  lineName?: string;
+  assignment?: Assignment;
+}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DAY_WIDTH = 140;
@@ -36,7 +46,7 @@ export default function GanttBoard() {
   const [plans, setPlans] = useState<PlanSummary[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [details, setDetails] = useState<PlanDetails | null>(null);
-  const [groupBy, setGroupBy] = useState<GroupBy>('workCenter');
+  const [groupBy, setGroupBy] = useState<GroupBy>('line');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [flash, setFlash] = useState<{ message: string; error: boolean } | null>(null);
@@ -99,7 +109,17 @@ export default function GanttBoard() {
     void loadDetails(selectedId);
   }, [selectedId, loadDetails]);
 
-  const groupLabel = useCallback((assignment: Assignment) => {
+  const groupLabel = useCallback((item: GanttItem) => {
+    if (groupBy === 'line') {
+      return item.lineName ?? 'Unassigned';
+    }
+
+    const assignment = item.assignment;
+
+    if (!assignment) {
+      return item.lineName ?? 'Unassigned';
+    }
+
     if (groupBy === 'employee') {
       return employees.get(assignment.employeeId)?.name ?? `Employee #${assignment.employeeId}`;
     }
@@ -109,21 +129,34 @@ export default function GanttBoard() {
     return workCenters.get(assignment.workCenterId)?.name ?? `Work center #${assignment.workCenterId}`;
   }, [groupBy, employees, operations, workCenters]);
 
-  const items = useMemo(() => {
+  const items = useMemo<GanttItem[]>(() => {
     if (!details) return [];
-    return details.tasks.flatMap((task) => task.assignments.map((assignment) => ({
-      key: `${task.taskId}-${assignment.assignmentId}`,
-      task,
-      assignment,
-      start: new Date(assignment.startTime).getTime(),
-      end: new Date(assignment.endTime).getTime(),
-    }))).filter((item) => Number.isFinite(item.start) && Number.isFinite(item.end));
+
+    return details.tasks.flatMap((task): GanttItem[] => {
+      if (task.lineAssignments.length > 0) {
+        return task.lineAssignments.map((assignment): GanttItem => ({
+          key: `${task.taskId}-line-${assignment.assignmentId}`,
+          task,
+          start: new Date(assignment.startTime).getTime(),
+          end: new Date(assignment.endTime).getTime(),
+          lineName: assignment.lineName,
+        }));
+      }
+
+      return task.assignments.map((assignment): GanttItem => ({
+        key: `${task.taskId}-${assignment.assignmentId}`,
+        task,
+        start: new Date(assignment.startTime).getTime(),
+        end: new Date(assignment.endTime).getTime(),
+        assignment,
+      }));
+    }).filter((item) => Number.isFinite(item.start) && Number.isFinite(item.end));
   }, [details]);
 
   const groups = useMemo(() => {
     const grouped = new Map<string, typeof items>();
     for (const item of items) {
-      const label = groupLabel(item.assignment);
+      const label = groupLabel(item);
       const bucket = grouped.get(label);
       if (bucket) bucket.push(item);
       else grouped.set(label, [item]);
@@ -160,7 +193,9 @@ export default function GanttBoard() {
 
   const position = (time: number) => ((time - timeline.start) / DAY_MS) * DAY_WIDTH;
 
-  const unscheduled = details?.tasks.filter((task) => task.assignments.length === 0) ?? [];
+  const unscheduled = details?.tasks.filter(
+    (task) => task.assignments.length === 0 && task.lineAssignments.length === 0,
+  ) ?? [];
 
   const actOnTask = async (task: ProductionTask, action: 'start' | 'complete') => {
     setBusyTaskId(task.taskId);
@@ -182,7 +217,7 @@ export default function GanttBoard() {
       <div className="page-toolbar compact-toolbar">
         <div>
           <h2>Gantt chart</h2>
-          <p>Each bar is one allocated operation. Group the timeline by work center, employee or operation.</p>
+          <p>Each bar is one production-line allocation. Group the timeline by line, work center, employee or operation.</p>
         </div>
         <div className="toolbar-actions">
           <label className="inline-field">
@@ -235,7 +270,7 @@ export default function GanttBoard() {
               <i />{friendlyStatus(details.status)}
             </span>
             <span>{formatDate(details.planningStart)} → {formatDate(details.planningEnd)}</span>
-            <span>{items.length} scheduled operation{items.length === 1 ? '' : 's'}</span>
+            <span>{items.length} scheduled allocation{items.length === 1 ? '' : 's'}</span>
           </div>
         )}
       </div>
@@ -275,20 +310,35 @@ export default function GanttBoard() {
                 <div className="gantt-row" key={group.label}>
                   <div className="gantt-label">
                     <strong>{group.label}</strong>
-                    <small>{group.items.length} operation{group.items.length === 1 ? '' : 's'}</small>
+                    <small>{group.items.length} allocation{group.items.length === 1 ? '' : 's'}</small>
                   </div>
                   <div className="gantt-timeline" style={{ width: timeline.width, backgroundImage: dayGrid }}>
                     {group.items.map((item) => {
                       const left = Math.max(0, position(item.start));
                       const width = Math.max(22, position(item.end) - position(item.start));
-                      const operation = operations.get(item.assignment.operationId);
+                      const operation = item.assignment
+                        ? operations.get(item.assignment.operationId)
+                        : undefined;
+                      const allocationLabel = item.lineName
+                        ?? operation?.operationName
+                        ?? (item.assignment ? `Operation #${item.assignment.operationId}` : 'Allocation');
+                      const startTime = item.assignment
+                        ? formatDateTime(item.assignment.startTime)
+                        : formatDateTime(new Date(item.start).toISOString());
+                      const endTime = item.assignment
+                        ? formatDateTime(item.assignment.endTime)
+                        : formatDateTime(new Date(item.end).toISOString());
+                      const hours = item.assignment
+                        ? item.assignment.allocatedHours
+                        : (item.end - item.start) / 3600000;
+
                       const title = [
-                        `Order #${item.task.orderId}`,
+                        item.task.orderId < 0 ? 'Replenishment' : `Order #${item.task.orderId}`,
                         `Product PRD-${item.task.productId}`,
                         `Qty ${item.task.quantity}`,
-                        operation?.operationName ?? `Operation #${item.assignment.operationId}`,
-                        `${formatDateTime(item.assignment.startTime)} → ${formatDateTime(item.assignment.endTime)}`,
-                        formatHours(item.assignment.allocatedHours),
+                        allocationLabel,
+                        `${startTime} → ${endTime}`,
+                        formatHours(hours),
                         friendlyStatus(item.task.status),
                       ].join(' · ');
                       return (
@@ -298,7 +348,7 @@ export default function GanttBoard() {
                           style={{ left, width }}
                           title={title}
                         >
-                          <span>#{item.task.orderId} · PRD-{item.task.productId}</span>
+                          <span>{item.task.orderId < 0 ? 'Replenishment' : `#${item.task.orderId}`} · PRD-{item.task.productId}</span>
                         </div>
                       );
                     })}
@@ -342,6 +392,7 @@ export default function GanttBoard() {
                   <th>TASK</th>
                   <th>ORDER</th>
                   <th>PRODUCT</th>
+                  <th>LINE</th>
                   <th>QTY</th>
                   <th>PRIORITY</th>
                   <th>START</th>
@@ -358,8 +409,9 @@ export default function GanttBoard() {
                   return (
                     <tr key={task.taskId}>
                       <td>#{task.taskId}</td>
-                      <td>#{task.orderId}</td>
+                      <td>{task.orderId < 0 ? 'Replenishment' : `#${task.orderId}`}</td>
                       <td>PRD-{task.productId}</td>
+                      <td>{[...new Set(task.lineAssignments.map((a) => a.lineName))].join(', ') || '—'}</td>
                       <td>{task.quantity}</td>
                       <td><span className={`priority-pill priority-${task.priority.toLowerCase()}`}>{task.priority}</span></td>
                       <td className="muted-cell">{formatDateTime(task.startTime)}</td>

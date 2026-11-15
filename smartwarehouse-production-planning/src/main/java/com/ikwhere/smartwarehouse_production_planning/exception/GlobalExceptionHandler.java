@@ -3,16 +3,22 @@ package com.ikwhere.smartwarehouse_production_planning.exception;
 import io.grpc.StatusRuntimeException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -52,6 +58,60 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, e.getMessage());
     }
 
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<Map<String, Object>> handleDataIntegrity(
+            DataIntegrityViolationException e) {
+
+        String detail = mostSpecificMessage(e);
+
+        if (detail.contains("violates not-null constraint")) {
+            Matcher column = Pattern.compile("column \"([^\"]+)\"")
+                    .matcher(detail);
+
+            String message = column.find()
+                    ? "Missing required value: " + column.group(1)
+                    : "A required value is missing";
+            log.warn("Rejected request with missing value: {}", detail);
+            return build(HttpStatus.BAD_REQUEST, message);
+        }
+
+        String message = describeConstraint(detail);
+        log.warn("Rejected request conflicting with existing data: {}", detail);
+        return build(HttpStatus.CONFLICT, message);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, Object>> handleUnreadableBody(
+            HttpMessageNotReadableException e) {
+
+        log.warn("Rejected malformed request body: {}", e.getMessage());
+        return build(
+                HttpStatus.BAD_REQUEST,
+                "Malformed request body. Check field types and date formats "
+                        + "(for example 2026-11-20 and 08:00)."
+        );
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<Map<String, Object>> handleTypeMismatch(
+            MethodArgumentTypeMismatchException e) {
+
+        return build(
+                HttpStatus.BAD_REQUEST,
+                "Invalid value for parameter '" + e.getName() + "'"
+        );
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<Map<String, Object>> handleMissingParameter(
+            MissingServletRequestParameterException e) {
+
+        return build(
+                HttpStatus.BAD_REQUEST,
+                "Missing required parameter '" + e.getParameterName() + "'"
+        );
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleUnexpected(Exception e) {
         log.error("Unhandled production planning error", e);
@@ -63,6 +123,42 @@ public class GlobalExceptionHandler {
 
     private String formatFieldError(FieldError error) {
         return error.getField() + ": " + error.getDefaultMessage();
+    }
+
+    private String mostSpecificMessage(DataIntegrityViolationException e) {
+        Throwable cause = e.getMostSpecificCause();
+        String message = cause == null ? null : cause.getMessage();
+        return message == null || message.isBlank()
+                ? String.valueOf(e.getMessage())
+                : message;
+    }
+
+    private String describeConstraint(String detail) {
+        Matcher constraint = Pattern.compile("constraint \"([^\"]+)\"")
+                .matcher(detail);
+
+        if (!constraint.find()) {
+            return "The request conflicts with existing production data";
+        }
+
+        return switch (constraint.group(1)) {
+            case "work_center_code_key" ->
+                    "A work center with this code already exists";
+            case "employee_employee_number_key" ->
+                    "An employee with this employee number already exists";
+            case "uk_routing_sequence" ->
+                    "An operation with this sequence number already exists "
+                            + "for this routing";
+            case "uk_product_material" ->
+                    "This BOM line already exists for the product and material";
+            case "uk_employee_skill" ->
+                    "This employee already has this skill";
+            case "production_working_calendar_work_date_key" ->
+                    "A working-calendar entry already exists for this date";
+            default -> constraint.group(1).endsWith("_fkey")
+                    ? "The referenced record does not exist"
+                    : "The request conflicts with existing production data";
+        };
     }
 
     private ResponseEntity<Map<String, Object>> build(HttpStatus status,

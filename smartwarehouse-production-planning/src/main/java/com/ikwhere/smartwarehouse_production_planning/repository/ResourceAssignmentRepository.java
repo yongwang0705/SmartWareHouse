@@ -65,6 +65,13 @@ public class ResourceAssignmentRepository {
         );
     }
 
+    public int deleteByTaskId(Long taskId) {
+        return jdbcTemplate.update(
+                "DELETE FROM production_resource_assignment WHERE production_task_id = ?",
+                taskId
+        );
+    }
+
     public List<ResourceAssignment> findByPlanId(Long planId) {
         return jdbcTemplate.query("""
                 SELECT a.*

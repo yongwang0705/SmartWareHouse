@@ -14,6 +14,9 @@ export interface Order {
   totalAmount: number;
   createdAt: string;
   items: OrderItem[];
+  dueDate?: string;
+  priority?: string;
+  productionStatus?: string;
 }
 
 export interface InventoryItem {
@@ -38,7 +41,7 @@ export interface KanbanBin {
   availableQuantity: number;
   triggerLevel: number;
   jitEnabled: boolean;
-  status: 'HEALTHY' | 'LOW' | 'REORDER' | 'CRITICAL' | string;
+  status: 'HEALTHY' | 'LOW' | 'REORDER' | 'CRITICAL' | 'OVERSTOCK' | string;
   fillPercent: number;
   /** Days since the inventory record last changed. */
   stockAgeDays: number | null;
@@ -48,9 +51,52 @@ export interface KanbanBin {
   daysSinceTrigger: number | null;
 }
 
+export interface WarehousePlot {
+  id: number;
+  code: string;
+  name: string;
+  plotType: string;
+  surfaceArea: number;
+  occupiedArea: number;
+  occupancyPercent: number;
+  productId: number | null;
+  productName: string | null;
+  isProduct: boolean | null;
+  capacityUnits: number;
+  occupiedUnits: number;
+  status: 'EMPTY' | 'OCCUPIED' | 'FULL' | string;
+}
+
+export interface Warehouse {
+  id: number;
+  code: string;
+  name: string;
+  address: string | null;
+  surfaceArea: number;
+  allocatedArea: number;
+  occupiedArea: number;
+  utilizationPercent: number;
+  plotCount: number;
+  assignedPlotCount: number;
+  plots: WarehousePlot[];
+}
+
+export interface CreateWarehousePlotRequest {
+  code: string;
+  name: string;
+  plotType: string;
+  surfaceArea: number;
+  occupiedArea?: number;
+  productId?: number | null;
+  capacityUnits?: number;
+  occupiedUnits?: number;
+}
+
 export interface CreateOrderRequest {
   customerId: number;
   items: Array<{ productId: number; quantity: number }>;
+  dueDate?: string;
+  priority?: string;
 }
 
 export interface BOMItem {
@@ -69,7 +115,27 @@ export interface BOMItem {
 export interface GeneratePlanRequest {
   planningStart: string;
   planningEnd: string;
+  scheduleStart?: string;
   algorithm?: string;
+}
+
+export interface ReplenishPlanRequest {
+  productId: number;
+  targetQuantity: number;
+  planningStart: string;
+  planningEnd: string;
+  scheduleStart?: string;
+}
+
+export interface PlanTaskRequest {
+  orderId: number;
+  productId: number;
+  quantity: number;
+  startTime: string;
+  endTime: string;
+  dueDate?: string;
+  lineId?: number | null;
+  priority?: string;
 }
 
 export interface PlanSummary {
@@ -104,6 +170,32 @@ export interface Assignment {
   status: string;
 }
 
+export interface LineAssignment {
+  assignmentId: number;
+  lineId: number;
+  lineCode: string;
+  lineName: string;
+  startTime: string;
+  endTime: string;
+  allocatedHours: number;
+}
+
+export interface ProductionLine {
+  id: number;
+  code: string;
+  name: string;
+  employees: number;
+  unitsPerHour: number;
+  active: boolean;
+}
+
+export interface CreateProductionLineRequest {
+  code: string;
+  name: string;
+  employees: number;
+  unitsPerHour: number;
+}
+
 export interface MaterialRequirement {
   requirementId: number;
   materialProductId: number;
@@ -122,10 +214,12 @@ export interface ProductionTask {
   endTime?: string | null;
   dueDate: string;
   estimatedCompletion?: string | null;
+  completedAt?: string | null;
   priority: string;
   status: string;
   statusReason?: string | null;
   assignments: Assignment[];
+  lineAssignments: LineAssignment[];
   materials: MaterialRequirement[];
 }
 

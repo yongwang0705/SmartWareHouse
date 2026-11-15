@@ -1,5 +1,7 @@
 package com.ikwhere.smartwarehouse_production_planning.service;
 
+import com.ikwhere.smartwarehouse.grpc.AddStockResponse;
+import com.ikwhere.smartwarehouse.grpc.FulfillMaterialsResponse;
 import com.ikwhere.smartwarehouse.grpc.InventoryResponse;
 import com.ikwhere.smartwarehouse.grpc.ProductionOrderDto;
 import com.ikwhere.smartwarehouse.grpc.ReleaseMaterialsResponse;
@@ -9,22 +11,23 @@ import com.ikwhere.smartwarehouse_production_planning.client.OrderGrpcClient;
 import com.ikwhere.smartwarehouse_production_planning.dto.AssignmentResponse;
 import com.ikwhere.smartwarehouse_production_planning.dto.CancelPlanResponse;
 import com.ikwhere.smartwarehouse_production_planning.dto.ConfirmPlanResponse;
+import com.ikwhere.smartwarehouse_production_planning.dto.LineAssignmentResponse;
 import com.ikwhere.smartwarehouse_production_planning.dto.GeneratePlanRequest;
 import com.ikwhere.smartwarehouse_production_planning.dto.MaterialRequirementResponse;
 import com.ikwhere.smartwarehouse_production_planning.dto.PlanDetailsResponse;
 import com.ikwhere.smartwarehouse_production_planning.dto.PlanSummaryResponse;
+import com.ikwhere.smartwarehouse_production_planning.dto.PlanTaskRequest;
+import com.ikwhere.smartwarehouse_production_planning.dto.ReplenishPlanRequest;
 import com.ikwhere.smartwarehouse_production_planning.dto.TaskResponse;
-import com.ikwhere.smartwarehouse_production_planning.engine.SchedulingEngine;
-import com.ikwhere.smartwarehouse_production_planning.engine.SchedulingEngine.EmployeeResource;
-import com.ikwhere.smartwarehouse_production_planning.engine.SchedulingEngine.ExistingAssignment;
-import com.ikwhere.smartwarehouse_production_planning.engine.SchedulingEngine.OperationAssignment;
-import com.ikwhere.smartwarehouse_production_planning.engine.SchedulingEngine.OrderDemand;
-import com.ikwhere.smartwarehouse_production_planning.engine.SchedulingEngine.OrderLine;
-import com.ikwhere.smartwarehouse_production_planning.engine.SchedulingEngine.PlanResult;
-import com.ikwhere.smartwarehouse_production_planning.engine.SchedulingEngine.SchedulingInput;
-import com.ikwhere.smartwarehouse_production_planning.engine.SchedulingEngine.TaskResult;
-import com.ikwhere.smartwarehouse_production_planning.engine.SchedulingEngine.TimeWindow;
-import com.ikwhere.smartwarehouse_production_planning.engine.SchedulingEngine.WorkDay;
+import com.ikwhere.smartwarehouse_production_planning.engine.LineSchedulingEngine;
+import com.ikwhere.smartwarehouse_production_planning.engine.LineSchedulingEngine.ExistingLineBooking;
+import com.ikwhere.smartwarehouse_production_planning.engine.LineSchedulingEngine.LineAssignment;
+import com.ikwhere.smartwarehouse_production_planning.engine.LineSchedulingEngine.OrderDemand;
+import com.ikwhere.smartwarehouse_production_planning.engine.LineSchedulingEngine.OrderLine;
+import com.ikwhere.smartwarehouse_production_planning.engine.LineSchedulingEngine.PlanResult;
+import com.ikwhere.smartwarehouse_production_planning.engine.LineSchedulingEngine.SchedulingInput;
+import com.ikwhere.smartwarehouse_production_planning.engine.LineSchedulingEngine.TaskResult;
+import com.ikwhere.smartwarehouse_production_planning.engine.LineSchedulingEngine.WorkDay;
 import com.ikwhere.smartwarehouse_production_planning.exception.ApiException;
 import com.ikwhere.smartwarehouse_production_planning.model.Employee;
 import com.ikwhere.smartwarehouse_production_planning.model.EmployeeShift;
@@ -33,6 +36,7 @@ import com.ikwhere.smartwarehouse_production_planning.model.EmployeeUnavailabili
 import com.ikwhere.smartwarehouse_production_planning.model.MaterialRequirement;
 import com.ikwhere.smartwarehouse_production_planning.model.ProductBom;
 import com.ikwhere.smartwarehouse_production_planning.model.ProductionPlan;
+import com.ikwhere.smartwarehouse_production_planning.model.ProductionLine;
 import com.ikwhere.smartwarehouse_production_planning.model.ProductionRouting;
 import com.ikwhere.smartwarehouse_production_planning.model.ProductionTask;
 import com.ikwhere.smartwarehouse_production_planning.model.ResourceAssignment;
@@ -40,8 +44,10 @@ import com.ikwhere.smartwarehouse_production_planning.model.RoutingOperation;
 import com.ikwhere.smartwarehouse_production_planning.model.WorkCenter;
 import com.ikwhere.smartwarehouse_production_planning.repository.ConfigurationRepository;
 import com.ikwhere.smartwarehouse_production_planning.repository.EmployeeRepository;
+import com.ikwhere.smartwarehouse_production_planning.repository.LineAssignmentRepository;
 import com.ikwhere.smartwarehouse_production_planning.repository.MaterialRequirementRepository;
 import com.ikwhere.smartwarehouse_production_planning.repository.ProductionPlanRepository;
+import com.ikwhere.smartwarehouse_production_planning.repository.ProductionLineRepository;
 import com.ikwhere.smartwarehouse_production_planning.repository.ProductionTaskRepository;
 import com.ikwhere.smartwarehouse_production_planning.repository.ResourceAssignmentRepository;
 import com.ikwhere.smartwarehouse_production_planning.repository.WorkCenterRepository;
@@ -51,6 +57,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
@@ -73,37 +82,37 @@ public class PlanningWorkflowService {
     private static final String DEFAULT_ALGORITHM =
             "PRIORITY_EARLIEST_DUE_DATE";
 
-    private final SchedulingEngine schedulingEngine;
+    private final LineSchedulingEngine lineSchedulingEngine;
     private final ConfigurationRepository configurationRepository;
-    private final EmployeeRepository employeeRepository;
-    private final WorkCenterRepository workCenterRepository;
     private final ProductionPlanRepository planRepository;
     private final ProductionTaskRepository taskRepository;
     private final ResourceAssignmentRepository assignmentRepository;
+    private final LineAssignmentRepository lineAssignmentRepository;
+    private final ProductionLineRepository productionLineRepository;
     private final MaterialRequirementRepository materialRepository;
     private final OrderGrpcClient orderGrpcClient;
     private final InventoryGrpcClient inventoryGrpcClient;
     private final TransactionTemplate transactionTemplate;
 
     public PlanningWorkflowService(
-            SchedulingEngine schedulingEngine,
+            LineSchedulingEngine lineSchedulingEngine,
             ConfigurationRepository configurationRepository,
-            EmployeeRepository employeeRepository,
-            WorkCenterRepository workCenterRepository,
             ProductionPlanRepository planRepository,
             ProductionTaskRepository taskRepository,
             ResourceAssignmentRepository assignmentRepository,
+            LineAssignmentRepository lineAssignmentRepository,
+            ProductionLineRepository productionLineRepository,
             MaterialRequirementRepository materialRepository,
             OrderGrpcClient orderGrpcClient,
             InventoryGrpcClient inventoryGrpcClient,
             TransactionTemplate transactionTemplate) {
-        this.schedulingEngine = schedulingEngine;
+        this.lineSchedulingEngine = lineSchedulingEngine;
         this.configurationRepository = configurationRepository;
-        this.employeeRepository = employeeRepository;
-        this.workCenterRepository = workCenterRepository;
         this.planRepository = planRepository;
         this.taskRepository = taskRepository;
         this.assignmentRepository = assignmentRepository;
+        this.lineAssignmentRepository = lineAssignmentRepository;
+        this.productionLineRepository = productionLineRepository;
         this.materialRepository = materialRepository;
         this.orderGrpcClient = orderGrpcClient;
         this.inventoryGrpcClient = inventoryGrpcClient;
@@ -127,80 +136,35 @@ public class PlanningWorkflowService {
                 ? DEFAULT_ALGORITHM
                 : request.algorithm();
 
+        LocalDateTime scheduleStart = request.scheduleStart() == null
+                ? request.planningStart().atStartOfDay()
+                : request.scheduleStart();
+
+        if (scheduleStart.toLocalDate().isBefore(request.planningStart())
+                || scheduleStart.toLocalDate().isAfter(request.planningEnd())) {
+            throw ApiException.badRequest(
+                    "scheduleStart must be within the planning window"
+            );
+        }
+
         List<ProductionOrderDto> orders =
                 orderGrpcClient.getPendingProductionOrders(
                         request.planningStart().toString(),
                         request.planningEnd().toString()
                 );
 
-        // BOM definitions and material ids
-        Map<Long, List<ProductBom>> bomsByProduct = new HashMap<>();
-        Set<Long> inventoryProductIds = new LinkedHashSet<>();
-
-        for (ProductionOrderDto order : orders) {
-            for (var item : order.getItemsList()) {
-                long productId = item.getProductId();
-                if (!bomsByProduct.containsKey(productId)) {
-                    List<ProductBom> boms =
-                            configurationRepository.findBomsByProductId(productId);
-                    bomsByProduct.put(productId, boms);
-                }
-                inventoryProductIds.add(productId);
-            }
-        }
-
-        for (List<ProductBom> boms : bomsByProduct.values()) {
-            for (ProductBom bom : boms) {
-                inventoryProductIds.add(bom.materialProductId());
-            }
-        }
-
-        Map<Long, Integer> availableInventory =
-                loadInventoryAvailability(inventoryProductIds);
-
-        // Routing per product
-        Map<Long, List<RoutingOperation>> routings = new HashMap<>();
-        for (Long productId : bomsByProduct.keySet()) {
-            Optional<ProductionRouting> routing =
-                    configurationRepository.findActiveRoutingByProductId(productId);
-
-            if (routing.isPresent()) {
-                routings.put(
-                        productId,
-                        configurationRepository.findOperationsByRoutingId(
-                                routing.get().id()
-                        )
-                );
-            } else {
-                routings.put(productId, List.of());
-            }
-        }
-
-        Map<Long, WorkCenter> workCenters = workCenterRepository.findAll()
-                .stream()
-                .collect(Collectors.toMap(WorkCenter::id, workCenter -> workCenter));
-
-        List<EmployeeResource> employees = loadEmployees();
-
-        Map<LocalDate, WorkDay> calendar = new HashMap<>();
-        for (var entry : configurationRepository.findWorkingCalendar(
-                request.planningStart(),
-                request.planningEnd().plusDays(30))) {
-            calendar.put(
-                    entry.workDate(),
-                    new WorkDay(
-                            entry.workingDay(),
-                            entry.startTime(),
-                            entry.endTime()
-                    )
-            );
-        }
-
         List<OrderDemand> demands = new ArrayList<>();
+        Set<Long> productIds = new LinkedHashSet<>();
+
         for (ProductionOrderDto order : orders) {
             List<OrderLine> lines = new ArrayList<>();
+
             for (var item : order.getItemsList()) {
-                lines.add(new OrderLine(item.getProductId(), item.getQuantity()));
+                lines.add(new OrderLine(
+                        item.getProductId(),
+                        item.getQuantity()
+                ));
+                productIds.add(item.getProductId());
             }
 
             demands.add(new OrderDemand(
@@ -213,38 +177,147 @@ public class PlanningWorkflowService {
             ));
         }
 
-        List<ExistingAssignment> existingAssignments =
-                assignmentRepository.findCommittedAssignments()
+        return runPlan(
+                request.planningStart(),
+                request.planningEnd(),
+                scheduleStart,
+                algorithm,
+                demands,
+                productIds
+        );
+    }
+
+    /**
+     * Produces a product up to a target level. This is the JIT replenishment
+     * path: it does not need a customer order and uses a synthetic demand with
+     * order id -1 so order-status updates are skipped.
+     */
+    @Transactional
+    public PlanSummaryResponse generateReplenishmentPlan(
+            ReplenishPlanRequest request) {
+
+        if (request.planningEnd().isBefore(request.planningStart())) {
+            throw ApiException.badRequest(
+                    "planningEnd must not be before planningStart"
+            );
+        }
+
+        LocalDateTime scheduleStart = request.scheduleStart() == null
+                ? request.planningStart().atStartOfDay()
+                : request.scheduleStart();
+
+        if (scheduleStart.toLocalDate().isBefore(request.planningStart())
+                || scheduleStart.toLocalDate().isAfter(request.planningEnd())) {
+            throw ApiException.badRequest(
+                    "scheduleStart must be within the planning window"
+            );
+        }
+
+        int available = loadInventoryAvailability(
+                Set.of(request.productId())
+        ).getOrDefault(request.productId(), 0);
+
+        if (request.targetQuantity() <= available) {
+            throw ApiException.badRequest(
+                    "Product " + request.productId() + " already has "
+                            + available + " available; target is "
+                            + request.targetQuantity()
+            );
+        }
+
+        List<OrderDemand> demands = List.of(new OrderDemand(
+                -1L,
+                0L,
+                request.planningEnd().atTime(23, 59, 59),
+                "HIGH",
+                LocalDateTime.now(),
+                List.of(new OrderLine(
+                        request.productId(),
+                        request.targetQuantity()
+                ))
+        ));
+
+        return runPlan(
+                request.planningStart(),
+                request.planningEnd(),
+                scheduleStart,
+                DEFAULT_ALGORITHM,
+                demands,
+                Set.of(request.productId())
+        );
+    }
+
+    private PlanSummaryResponse runPlan(LocalDate planningStart,
+                                        LocalDate planningEnd,
+                                        LocalDateTime scheduleStart,
+                                        String algorithm,
+                                        List<OrderDemand> demands,
+                                        Set<Long> productIds) {
+
+        Map<Long, List<ProductBom>> bomsByProduct = new HashMap<>();
+        Set<Long> inventoryProductIds = new LinkedHashSet<>();
+
+        for (Long productId : productIds) {
+            List<ProductBom> boms =
+                    configurationRepository.findBomsByProductId(productId);
+            bomsByProduct.put(productId, boms);
+            inventoryProductIds.add(productId);
+
+            for (ProductBom bom : boms) {
+                inventoryProductIds.add(bom.materialProductId());
+            }
+        }
+
+        Map<Long, Integer> availableInventory =
+                loadInventoryAvailability(inventoryProductIds);
+
+        List<ProductionLine> lines =
+                productionLineRepository.findAllActive();
+
+        Map<LocalDate, WorkDay> calendar = new HashMap<>();
+
+        for (var entry : configurationRepository.findWorkingCalendar(
+                scheduleStart.toLocalDate(),
+                planningEnd.plusDays(30))) {
+            calendar.put(
+                    entry.workDate(),
+                    new WorkDay(
+                            entry.workingDay(),
+                            entry.startTime(),
+                            entry.endTime()
+                    )
+            );
+        }
+
+        List<ExistingLineBooking> existingBookings =
+                lineAssignmentRepository.findCommittedBookings()
                         .stream()
-                        .map(assignment -> new ExistingAssignment(
-                                assignment.workCenterId(),
-                                assignment.employeeId(),
-                                assignment.startTime(),
-                                assignment.endTime()
+                        .map(booking -> new ExistingLineBooking(
+                                booking.lineId(),
+                                booking.startTime(),
+                                booking.endTime()
                         ))
                         .toList();
 
-        PlanResult result = schedulingEngine.generate(new SchedulingInput(
+        PlanResult result = lineSchedulingEngine.generate(new SchedulingInput(
                 demands,
                 availableInventory,
                 bomsByProduct,
-                routings,
-                workCenters,
-                employees,
+                lines,
                 calendar,
-                existingAssignments,
-                request.planningStart().atStartOfDay()
+                existingBookings,
+                scheduleStart.withNano(0)
         ));
 
         ProductionPlan plan = planRepository.create(
-                request.planningStart().atStartOfDay(),
-                request.planningEnd().atTime(23, 59, 59),
+                planningStart.atStartOfDay(),
+                planningEnd.atTime(23, 59, 59),
                 algorithm
         );
 
         for (TaskResult taskResult : result.tasks()) {
             LocalDateTime dueDate = taskResult.dueDate() == null
-                    ? request.planningEnd().atTime(23, 59, 59)
+                    ? planningEnd.atTime(23, 59, 59)
                     : taskResult.dueDate();
 
             ProductionTask task = taskRepository.save(
@@ -261,12 +334,10 @@ public class PlanningWorkflowService {
                     taskResult.estimatedCompletion()
             );
 
-            for (OperationAssignment assignment : taskResult.assignments()) {
-                assignmentRepository.save(
+            for (LineAssignment assignment : taskResult.lineAssignments()) {
+                lineAssignmentRepository.save(
                         task.id(),
-                        assignment.operationId(),
-                        assignment.workCenterId(),
-                        assignment.employeeId(),
+                        assignment.lineId(),
                         assignment.start(),
                         assignment.end(),
                         assignment.allocatedHours()
@@ -285,6 +356,226 @@ public class PlanningWorkflowService {
         }
 
         return summarise(plan, taskRepository.findByPlanId(plan.id()));
+    }
+
+    // ---------------------------------------------------------------------
+    // Manual plan editing (split an order into scheduled parts)
+    // ---------------------------------------------------------------------
+
+    @Transactional
+    public TaskResponse addPlanTask(Long planId, PlanTaskRequest request) {
+        ProductionPlan plan = requireEditablePlan(planId);
+        validateTaskTimes(request.startTime(), request.endTime());
+
+        ProductionTask task = taskRepository.save(
+                planId,
+                request.orderId(),
+                request.productId(),
+                request.quantity(),
+                request.dueDate() == null ? plan.planningEnd() : request.dueDate(),
+                request.startTime(),
+                request.endTime(),
+                normalizePriority(request.priority()),
+                "SCHEDULED",
+                null,
+                request.endTime()
+        );
+
+        rebuildMaterialRequirements(
+                task.id(),
+                request.productId(),
+                request.quantity()
+        );
+
+        assignManualLine(
+                task.id(),
+                request.lineId(),
+                request.startTime(),
+                request.endTime()
+        );
+
+        return getTask(task.id());
+    }
+
+    @Transactional
+    public TaskResponse updatePlanTask(Long planId,
+                                       Long taskId,
+                                       PlanTaskRequest request) {
+        requireEditablePlan(planId);
+
+        ProductionTask task = requireTask(taskId);
+
+        if (!planId.equals(task.planId())) {
+            throw ApiException.notFound(
+                    "Task " + taskId + " does not belong to plan " + planId
+            );
+        }
+
+        if ("COMPLETED".equals(task.status())
+                || "CANCELLED".equals(task.status())) {
+            throw ApiException.conflict(
+                    "Task " + taskId + " cannot be edited from status "
+                            + task.status()
+            );
+        }
+
+        validateTaskTimes(request.startTime(), request.endTime());
+
+        ProductionPlan plan = requirePlan(planId);
+
+        taskRepository.updatePlanTask(
+                taskId,
+                request.orderId(),
+                request.productId(),
+                request.quantity(),
+                request.dueDate() == null ? plan.planningEnd() : request.dueDate(),
+                request.startTime(),
+                request.endTime(),
+                normalizePriority(request.priority()),
+                "SCHEDULED",
+                request.endTime()
+        );
+
+        // Manual time changes invalidate the auto-generated resource
+        // assignments; the timeline is driven by the task's own times.
+        assignmentRepository.deleteByTaskId(taskId);
+        assignManualLine(
+                taskId,
+                request.lineId(),
+                request.startTime(),
+                request.endTime()
+        );
+
+        rebuildMaterialRequirements(
+                taskId,
+                request.productId(),
+                request.quantity()
+        );
+
+        return getTask(taskId);
+    }
+
+    @Transactional
+    public void deletePlanTask(Long planId, Long taskId) {
+        requireEditablePlan(planId);
+
+        ProductionTask task = requireTask(taskId);
+
+        if (!planId.equals(task.planId())) {
+            throw ApiException.notFound(
+                    "Task " + taskId + " does not belong to plan " + planId
+            );
+        }
+
+        taskRepository.deleteById(taskId);
+    }
+
+    private ProductionPlan requireEditablePlan(Long planId) {
+        ProductionPlan plan = requirePlan(planId);
+
+        if (!"DRAFT".equals(plan.status())
+                && !"VALIDATED".equals(plan.status())) {
+            throw ApiException.conflict(
+                    "Plan " + planId + " can only be edited while DRAFT or VALIDATED"
+            );
+        }
+
+        return plan;
+    }
+
+    private void validateTaskTimes(LocalDateTime start,
+                                    LocalDateTime end) {
+        if (start == null || end == null || !end.isAfter(start)) {
+            throw ApiException.badRequest(
+                    "endTime must be after startTime"
+            );
+        }
+    }
+
+    private void assignManualLine(Long taskId,
+                                  Long lineId,
+                                  LocalDateTime start,
+                                  LocalDateTime end) {
+        lineAssignmentRepository.deleteByTaskId(taskId);
+
+        if (lineId == null) {
+            return;
+        }
+
+        productionLineRepository.findById(lineId)
+                .filter(line -> Boolean.TRUE.equals(line.active()))
+                .orElseThrow(() -> ApiException.notFound(
+                        "Production line not found: " + lineId
+                ));
+
+        long minutes = Math.max(
+                0,
+                Duration.between(start, end).toMinutes()
+        );
+
+        BigDecimal hours = BigDecimal.valueOf(minutes)
+                .divide(
+                        BigDecimal.valueOf(60),
+                        2,
+                        RoundingMode.HALF_UP
+                );
+
+        lineAssignmentRepository.save(
+                taskId,
+                lineId,
+                start,
+                end,
+                hours
+        );
+    }
+
+    private String normalizePriority(String priority) {
+        if (priority == null || priority.isBlank()) {
+            return "NORMAL";
+        }
+
+        String value = priority.trim().toUpperCase();
+        return Set.of("HIGH", "NORMAL", "LOW").contains(value)
+                ? value
+                : "NORMAL";
+    }
+
+    private void rebuildMaterialRequirements(Long taskId,
+                                             Long productId,
+                                             int quantity) {
+        materialRepository.deleteByTaskId(taskId);
+
+        List<ProductBom> boms =
+                configurationRepository.findBomsByProductId(productId);
+
+        if (boms.isEmpty()) {
+            return;
+        }
+
+        Set<Long> materialIds = boms.stream()
+                .map(ProductBom::materialProductId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        Map<Long, Integer> available =
+                loadInventoryAvailability(materialIds);
+
+        for (ProductBom bom : boms) {
+            int required = bom.quantityPerUnit() * quantity;
+            int availableQuantity = Math.max(
+                    0,
+                    available.getOrDefault(bom.materialProductId(), 0)
+            );
+            int reserved = Math.min(required, availableQuantity);
+            String status = reserved >= required ? "RESERVED" : "SHORTAGE";
+
+            materialRepository.save(
+                    taskId,
+                    bom.materialProductId(),
+                    required,
+                    reserved,
+                    status
+            );
+        }
     }
 
     // ---------------------------------------------------------------------
@@ -593,18 +884,20 @@ public class PlanningWorkflowService {
         taskRepository.updateStatus(taskId, "IN_PROGRESS");
         planRepository.updateStatus(plan.id(), "IN_PROGRESS");
 
-        try {
-            orderGrpcClient.updateProductionStatus(
-                    task.orderId(),
-                    "IN_PRODUCTION"
-            );
-        } catch (RuntimeException e) {
-            log.error(
-                    "Task {} started but order {} status update failed",
-                    taskId,
-                    task.orderId(),
-                    e
-            );
+        if (task.orderId() != null && task.orderId() > 0) {
+            try {
+                orderGrpcClient.updateProductionStatus(
+                        task.orderId(),
+                        "IN_PRODUCTION"
+                );
+            } catch (RuntimeException e) {
+                log.error(
+                        "Task {} started but order {} status update failed",
+                        taskId,
+                        task.orderId(),
+                        e
+                );
+            }
         }
 
         return getTask(taskId);
@@ -620,26 +913,69 @@ public class PlanningWorkflowService {
             );
         }
 
-        taskRepository.updateStatus(taskId, "COMPLETED");
+        ProductionPlan plan = requirePlan(task.planId());
+        boolean lastTask = taskRepository.countByPlanIdAndStatusNot(
+                task.planId(),
+                "COMPLETED"
+        ) == 1;
 
-        List<ProductionTask> orderTasks =
-                taskRepository.findByOrderId(task.orderId());
+        // Production output becomes available finished-goods inventory.
+        AddStockResponse receipt =
+                inventoryGrpcClient.addStock(task.productId(), task.quantity());
 
-        boolean orderComplete = orderTasks.stream()
-                .allMatch(item -> "COMPLETED".equals(item.status()));
+        if (!receipt.getSuccess()) {
+            throw ApiException.badGateway(
+                    "Could not add finished goods to inventory: "
+                            + receipt.getMessage()
+            );
+        }
 
-        if (orderComplete) {
-            try {
-                orderGrpcClient.updateProductionStatus(
-                        task.orderId(),
-                        "PRODUCTION_COMPLETED"
-                );
-            } catch (RuntimeException e) {
-                log.error(
-                        "Order {} production status update failed",
-                        task.orderId(),
-                        e
-                );
+        // When the whole plan completes, consume the reserved BOM materials.
+        if (lastTask && plan.reservationReference() != null) {
+            Map<Long, Integer> requiredMaterials = aggregateRequirements(
+                    materialRepository.findByPlanId(task.planId())
+            );
+
+            if (!requiredMaterials.isEmpty()) {
+                FulfillMaterialsResponse consumption =
+                        inventoryGrpcClient.fulfillMaterials(
+                                plan.reservationReference(),
+                                requiredMaterials
+                        );
+
+                if (!consumption.getSuccess()) {
+                    throw ApiException.badGateway(
+                            "Could not consume BOM materials: "
+                                    + consumption.getMessage()
+                    );
+                }
+
+                materialRepository.markConsumedByPlan(task.planId());
+            }
+        }
+
+        taskRepository.markCompleted(taskId);
+
+        if (task.orderId() != null && task.orderId() > 0) {
+            List<ProductionTask> orderTasks =
+                    taskRepository.findByOrderId(task.orderId());
+
+            boolean orderComplete = orderTasks.stream()
+                    .allMatch(item -> "COMPLETED".equals(item.status()));
+
+            if (orderComplete) {
+                try {
+                    orderGrpcClient.updateProductionStatus(
+                            task.orderId(),
+                            "PRODUCTION_COMPLETED"
+                    );
+                } catch (RuntimeException e) {
+                    log.error(
+                            "Order {} production status update failed",
+                            task.orderId(),
+                            e
+                    );
+                }
             }
         }
 
@@ -697,42 +1033,6 @@ public class PlanningWorkflowService {
         return availability;
     }
 
-    private List<EmployeeResource> loadEmployees() {
-        Map<Long, Set<String>> skills = new HashMap<>();
-        for (EmployeeSkill skill : configurationRepository.findAllEmployeeSkills()) {
-            skills.computeIfAbsent(skill.employeeId(), key -> new LinkedHashSet<>())
-                    .add(skill.skillCode());
-        }
-
-        Map<Long, List<EmployeeShift>> shifts = new HashMap<>();
-        for (EmployeeShift shift
-                : configurationRepository.findAllEmployeeShifts()) {
-            shifts.computeIfAbsent(shift.employeeId(), key -> new ArrayList<>())
-                    .add(shift);
-        }
-
-        Map<Long, List<TimeWindow>> unavailability = new HashMap<>();
-        for (EmployeeUnavailability item
-                : configurationRepository.findAllUnavailability()) {
-            unavailability
-                    .computeIfAbsent(item.employeeId(), key -> new ArrayList<>())
-                    .add(new TimeWindow(item.startTime(), item.endTime()));
-        }
-
-        List<EmployeeResource> resources = new ArrayList<>();
-
-        for (Employee employee : employeeRepository.findAll()) {
-            resources.add(new EmployeeResource(
-                    employee.id(),
-                    skills.getOrDefault(employee.id(), Set.of()),
-                    shifts.getOrDefault(employee.id(), List.of()),
-                    unavailability.getOrDefault(employee.id(), List.of())
-            ));
-        }
-
-        return resources;
-    }
-
     private Map<Long, Integer> aggregateRequirements(
             List<MaterialRequirement> requirements) {
 
@@ -779,7 +1079,9 @@ public class PlanningWorkflowService {
                                              String status) {
         Set<Long> orderIds = new LinkedHashSet<>();
         for (ProductionTask task : tasks) {
-            orderIds.add(task.orderId());
+            if (task.orderId() != null && task.orderId() > 0) {
+                orderIds.add(task.orderId());
+            }
         }
 
         List<String> failures = new ArrayList<>();
@@ -851,6 +1153,9 @@ public class PlanningWorkflowService {
                         .map(this::toAssignmentResponse)
                         .toList();
 
+        List<LineAssignmentResponse> lineAssignments =
+                lineAssignmentRepository.findByTaskId(task.id());
+
         List<MaterialRequirementResponse> materials =
                 materialRepository.findByTaskId(task.id())
                         .stream()
@@ -867,10 +1172,12 @@ public class PlanningWorkflowService {
                 task.endTime(),
                 task.dueDate(),
                 task.estimatedCompletion(),
+                task.completedAt(),
                 task.priority(),
                 task.status(),
                 task.statusReason(),
                 assignments,
+                lineAssignments,
                 materials
         );
     }

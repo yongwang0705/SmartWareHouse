@@ -13,10 +13,12 @@ public record TaskResponse(
         LocalDateTime endTime,
         LocalDateTime dueDate,
         LocalDateTime estimatedCompletion,
+        LocalDateTime completedAt,
         String priority,
         String status,
         String statusReason,
         List<AssignmentResponse> assignments,
+        List<LineAssignmentResponse> lineAssignments,
         List<MaterialRequirementResponse> materials
 ) {
 }

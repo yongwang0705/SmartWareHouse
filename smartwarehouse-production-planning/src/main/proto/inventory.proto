@@ -22,6 +22,33 @@ service InventoryService {
 
   rpc ReleaseMaterials (ReleaseMaterialsRequest)
       returns (ReleaseMaterialsResponse);
+
+  rpc AddStock (AddStockRequest)
+      returns (AddStockResponse);
+
+  rpc FulfillMaterials (FulfillMaterialsRequest)
+      returns (FulfillMaterialsResponse);
+}
+
+message FulfillMaterialsRequest {
+  string reservation_reference = 1;
+  repeated MaterialReservationItem items = 2;
+}
+
+message FulfillMaterialsResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message AddStockRequest {
+  int64 product_id = 1;
+  int32 quantity = 2;
+}
+
+message AddStockResponse {
+  bool success = 1;
+  string message = 2;
+  int32 quantity = 3;
 }
 
 message ReleaseStockRequest {

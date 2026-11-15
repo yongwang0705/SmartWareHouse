@@ -1,5 +1,9 @@
 package com.ikwhere.smartwarehouse_order_service.service;
 
+import com.ikwhere.smartwarehouse.grpc.FulfillMaterialsResponse;
+import com.ikwhere.smartwarehouse.grpc.InventoryResponse;
+import com.ikwhere.smartwarehouse.grpc.ReleaseMaterialsResponse;
+import com.ikwhere.smartwarehouse.grpc.ReserveMaterialsResponse;
 import com.ikwhere.smartwarehouse_order_service.client.InventoryGrpcClient;
 import com.ikwhere.smartwarehouse_order_service.dto.CreateOrderRequest;
 import com.ikwhere.smartwarehouse_order_service.dto.OrderItemRequest;
@@ -9,28 +13,38 @@ import com.ikwhere.smartwarehouse_order_service.model.Order;
 import com.ikwhere.smartwarehouse_order_service.model.OrderItem;
 import com.ikwhere.smartwarehouse_order_service.repository.OrderItemRepository;
 import com.ikwhere.smartwarehouse_order_service.repository.OrderRepository;
-import com.ikwhere.smartwarehouse.grpc.ReleaseStockResponse;
-import java.util.ArrayList;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.ikwhere.smartwarehouse_order_service.client.InventoryGrpcClient;
-import com.ikwhere.smartwarehouse.grpc.InventoryResponse;
-import com.ikwhere.smartwarehouse.grpc.ReserveStockResponse;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 @Service
 public class OrderService {
+
+    private static final Logger log =
+            LoggerFactory.getLogger(OrderService.class);
+
+    private static final String RESERVATION_PREFIX = "ORDER-";
+
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final ProductCatalogClient productCatalogClient;
     private final InventoryGrpcClient inventoryGrpcClient;
+
     public OrderService(
             OrderRepository orderRepository,
             OrderItemRepository orderItemRepository,
-            ProductCatalogClient productCatalogClient, InventoryGrpcClient inventoryGrpcClient
+            ProductCatalogClient productCatalogClient,
+            InventoryGrpcClient inventoryGrpcClient
     ) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
@@ -38,259 +52,306 @@ public class OrderService {
         this.inventoryGrpcClient = inventoryGrpcClient;
     }
 
+    /**
+     * Creates an order in CREATED state. No inventory is touched yet; the
+     * order must be confirmed before stock is checked or production planned.
+     */
     @Transactional
     public OrderResponse createOrder(CreateOrderRequest request) {
 
         List<ProductCatalogClient.ProductDetails> products =
                 new ArrayList<>();
 
-        List<OrderItemRequest> reservedItems = new ArrayList<>();
+        for (OrderItemRequest item : request.items()) {
+            products.add(
+                    productCatalogClient.getProduct(item.productId())
+            );
+        }
 
-        try {
+        BigDecimal totalAmount = BigDecimal.ZERO;
 
-            // 1. Retrieve product details and check inventory
-            for (OrderItemRequest item : request.items()) {
+        for (int i = 0; i < request.items().size(); i++) {
+            OrderItemRequest item = request.items().get(i);
+            totalAmount = totalAmount.add(
+                    products.get(i).unitPrice()
+                            .multiply(BigDecimal.valueOf(item.quantity()))
+            );
+        }
 
-                ProductCatalogClient.ProductDetails product =
-                        productCatalogClient.getProduct(item.productId());
+        LocalDateTime dueDate = request.dueDate() != null
+                ? request.dueDate().atTime(17, 0)
+                : LocalDateTime.now().plusDays(7);
 
+        String priority = request.priority() != null
+                ? request.priority().toUpperCase()
+                : "NORMAL";
+
+        Order order = orderRepository.save(
+                request.customerId(),
+                totalAmount,
+                dueDate,
+                priority
+        );
+
+        List<OrderItemResponse> itemResponses = new ArrayList<>();
+
+        for (int i = 0; i < request.items().size(); i++) {
+            OrderItemRequest item = request.items().get(i);
+            ProductCatalogClient.ProductDetails product = products.get(i);
+
+            OrderItem savedItem = orderItemRepository.save(new OrderItem(
+                    null,
+                    order.id(),
+                    product.productId(),
+                    product.productName(),
+                    item.quantity(),
+                    product.unitPrice()
+            ));
+
+            itemResponses.add(new OrderItemResponse(
+                    savedItem.id(),
+                    savedItem.productId(),
+                    savedItem.productName(),
+                    savedItem.quantity(),
+                    savedItem.unitPrice(),
+                    savedItem.unitPrice().multiply(
+                            BigDecimal.valueOf(item.quantity())
+                    )
+            ));
+        }
+
+        return new OrderResponse(
+                order.id(),
+                order.customerId(),
+                order.status(),
+                order.totalAmount(),
+                order.createdAt(),
+                itemResponses,
+                order.dueDate(),
+                order.priority(),
+                order.productionStatus()
+        );
+    }
+
+    /**
+     * Confirms an order. Confirmation is the point where inventory is checked:
+     * - if stock covers the whole order, it is reserved and the order is READY;
+     * - otherwise the order enters PENDING_PRODUCTION so the planner can
+     *   arrange production for the shortfall.
+     */
+    @Transactional
+    public OrderResponse confirmOrder(Long orderId) {
+
+        Order order = requireOrder(orderId);
+
+        if (!"CREATED".equals(order.status())) {
+            throw new IllegalStateException(
+                    "Order " + orderId + " cannot be confirmed from status "
+                            + order.status()
+            );
+        }
+
+        List<OrderItem> items =
+                orderItemRepository.findByOrderId(orderId);
+        Map<Long, Integer> quantities = aggregateItemQuantities(items);
+
+        String productionStatus = "PENDING_PRODUCTION";
+
+        if (!quantities.isEmpty()) {
+            boolean fullyCovered = true;
+
+            for (Map.Entry<Long, Integer> entry : quantities.entrySet()) {
                 InventoryResponse inventory =
-                        inventoryGrpcClient.getInventory(item.productId());
+                        inventoryGrpcClient.getInventory(entry.getKey());
 
-                if (inventory.getAvailableQuantity() < item.quantity()) {
-                    throw new IllegalStateException(
-                            "Insufficient stock for product: " + item.productId()
-                    );
+                if (inventory.getAvailableQuantity() < entry.getValue()) {
+                    fullyCovered = false;
+                    break;
                 }
-
-                products.add(new ProductCatalogClient.ProductDetails(
-                        product.productId(),
-                        inventory.getProductName(),
-                        product.unitPrice()
-                ));
             }
 
-            // 2. Reserve stock
-            for (OrderItemRequest item : request.items()) {
+            if (fullyCovered) {
+                String reference = RESERVATION_PREFIX + orderId;
 
-                ReserveStockResponse reservation =
-                        inventoryGrpcClient.reserveStock(
-                                item.productId(),
-                                item.quantity()
+                ReserveMaterialsResponse reservation =
+                        inventoryGrpcClient.reserveMaterials(
+                                reference,
+                                quantities
                         );
 
-                if (!reservation.getSuccess()) {
-                    throw new IllegalStateException(reservation.getMessage());
-                }
-
-                reservedItems.add(item);
-            }
-
-            // 3. Calculate total amount
-            BigDecimal totalAmount = BigDecimal.ZERO;
-
-            for (int i = 0; i < request.items().size(); i++) {
-
-                OrderItemRequest item = request.items().get(i);
-
-                BigDecimal subtotal = products.get(i).unitPrice()
-                        .multiply(BigDecimal.valueOf(item.quantity()));
-
-                totalAmount = totalAmount.add(subtotal);
-            }
-
-            // 4. Save order
-            LocalDateTime dueDate = request.dueDate() != null
-                    ? request.dueDate().atTime(17, 0)
-                    : LocalDateTime.now().plusDays(7);
-
-            String priority = request.priority() != null
-                    ? request.priority().toUpperCase()
-                    : "NORMAL";
-
-            Order order = orderRepository.save(
-                    request.customerId(),
-                    totalAmount,
-                    dueDate,
-                    priority
-            );
-
-            // 5. Save order items
-            List<OrderItemResponse> itemResponses =
-                    java.util.stream.IntStream.range(0, request.items().size())
-                            .mapToObj(i -> {
-
-                                OrderItemRequest item = request.items().get(i);
-                                ProductCatalogClient.ProductDetails product =
-                                        products.get(i);
-
-                                OrderItem orderItem = new OrderItem(
-                                        null,
-                                        order.id(),
-                                        product.productId(),
-                                        product.productName(),
-                                        item.quantity(),
-                                        product.unitPrice()
-                                );
-
-                                OrderItem savedItem = orderItemRepository.save(orderItem);
-
-                                return new OrderItemResponse(
-                                        savedItem.id(),
-                                        savedItem.productId(),
-                                        savedItem.productName(),
-                                        savedItem.quantity(),
-                                        savedItem.unitPrice(),
-                                        savedItem.unitPrice().multiply(
-                                                BigDecimal.valueOf(item.quantity())
-                                        )
-                                );
-                            })
-                            .toList();
-
-            // 6. Return response
-            return new OrderResponse(
-                    order.id(),
-                    order.customerId(),
-                    order.status(),
-                    order.totalAmount(),
-                    order.createdAt(),
-                    itemResponses,
-                    order.dueDate(),
-                    order.priority(),
-                    order.productionStatus()
-            );
-
-        } catch (RuntimeException e) {
-
-            // 7. Compensate: release successfully reserved stock
-            for (OrderItemRequest item : reservedItems) {
-                try {
-                    inventoryGrpcClient.releaseStock(
-                            item.productId(),
-                            item.quantity()
+                if (reservation.getSuccess()) {
+                    productionStatus = "READY";
+                    registerRollbackRelease(reference, quantities);
+                } else {
+                    log.warn(
+                            "Order {} could not reserve stock ({}); "
+                                    + "queueing production",
+                            orderId,
+                            reservation.getMessage()
                     );
-                } catch (Exception compensationError) {
-                    e.addSuppressed(compensationError);
                 }
             }
-
-            throw e;
         }
+
+        int updated = orderRepository.confirmOrder(orderId, productionStatus);
+
+        if (updated != 1) {
+            throw new IllegalStateException(
+                    "Could not confirm order: " + orderId
+            );
+        }
+
+        return buildOrderResponse(requireOrder(orderId));
     }
+
+    /**
+     * Final user confirmation. Inventory is consumed (reserved stock for READY
+     * orders, or available stock for orders that were produced to order).
+     */
+    @Transactional
+    public OrderResponse completeOrder(Long orderId) {
+
+        Order order = requireOrder(orderId);
+
+        if (!"CONFIRMED".equals(order.status())) {
+            throw new IllegalStateException(
+                    "Order " + orderId + " cannot be completed from status "
+                            + order.status()
+            );
+        }
+
+        String productionStatus = order.productionStatus();
+
+        if (!"READY".equals(productionStatus)
+                && !"PRODUCTION_COMPLETED".equals(productionStatus)) {
+            throw new IllegalStateException(
+                    "Order " + orderId + " is not ready to complete "
+                            + "(production status: " + productionStatus + ")"
+            );
+        }
+
+        List<OrderItem> items =
+                orderItemRepository.findByOrderId(orderId);
+        Map<Long, Integer> quantities = aggregateItemQuantities(items);
+
+        if (!quantities.isEmpty()) {
+            FulfillMaterialsResponse fulfillment =
+                    inventoryGrpcClient.fulfillMaterials(
+                            RESERVATION_PREFIX + orderId,
+                            quantities
+                    );
+
+            if (!fulfillment.getSuccess()) {
+                throw new IllegalStateException(
+                        "Could not fulfil inventory for order " + orderId
+                                + ": " + fulfillment.getMessage()
+                );
+            }
+        }
+
+        int updated = orderRepository.completeOrder(orderId);
+
+        if (updated != 1) {
+            throw new IllegalStateException(
+                    "Could not complete order: " + orderId
+            );
+        }
+
+        return buildOrderResponse(requireOrder(orderId));
+    }
+
     @Transactional
     public void cancelOrder(Long orderId) {
 
-        // 1. Find order
-        Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new OrderNotFoundException(orderId));
+        Order order = requireOrder(orderId);
 
-        // 2. Check current status
         if ("CANCELLED".equals(order.status())) {
             throw new IllegalStateException(
                     "Order " + orderId + " is already cancelled"
             );
         }
 
-        // 3. Retrieve order items
+        if ("COMPLETED".equals(order.status())) {
+            throw new IllegalStateException(
+                    "Order " + orderId + " is already completed"
+            );
+        }
+
+        String productionStatus = order.productionStatus();
+
+        if ("PLANNED".equals(productionStatus)
+                || "IN_PRODUCTION".equals(productionStatus)
+                || "PRODUCTION_COMPLETED".equals(productionStatus)) {
+            throw new IllegalStateException(
+                    "Order " + orderId + " cannot be cancelled while production "
+                            + "status is " + productionStatus
+            );
+        }
+
         List<OrderItem> items =
                 orderItemRepository.findByOrderId(orderId);
+        Map<Long, Integer> quantities = aggregateItemQuantities(items);
 
-        List<OrderItem> releasedItems = new ArrayList<>();
+        if (!quantities.isEmpty()) {
+            String reference = RESERVATION_PREFIX + orderId;
+            ReleaseMaterialsResponse release =
+                    inventoryGrpcClient.releaseMaterials(reference, quantities);
 
-        try {
-
-            // 4. Release reserved stock through gRPC
-            for (OrderItem item : items) {
-
-                ReleaseStockResponse response =
-                        inventoryGrpcClient.releaseStock(
-                                item.productId(),
-                                item.quantity()
-                        );
-
-                if (!response.getSuccess()) {
-                    throw new IllegalStateException(response.getMessage());
-                }
-
-                releasedItems.add(item);
-            }
-
-            // 5. Update order status
-            int updated = orderRepository.updateStatus(orderId, "CANCELLED");
-
-            if (updated != 1) {
+            if (release.getSuccess()) {
+                log.info(
+                        "Released inventory reservation {} for order {}",
+                        reference,
+                        orderId
+                );
+            } else if (!isUnknownReservation(release.getMessage())) {
                 throw new IllegalStateException(
-                        "Could not cancel order: " + orderId
+                        "Could not release inventory for order " + orderId
+                                + ": " + release.getMessage()
                 );
             }
+        }
 
-        } catch (RuntimeException e) {
+        int updated = orderRepository.updateStatus(orderId, "CANCELLED");
 
-            // 6. Compensation: restore reservations if cancellation fails
-            for (OrderItem item : releasedItems) {
-                try {
-                    ReserveStockResponse response =
-                            inventoryGrpcClient.reserveStock(
-                                    item.productId(),
-                                    item.quantity()
-                            );
-
-                    if (!response.getSuccess()) {
-                        throw new IllegalStateException(response.getMessage());
-                    }
-
-                } catch (Exception compensationError) {
-                    e.addSuppressed(compensationError);
-                }
-            }
-
-            throw e;
+        if (updated != 1) {
+            throw new IllegalStateException(
+                    "Could not cancel order: " + orderId
+            );
         }
     }
-    // GET ALL ORDERS
+
     @Transactional(readOnly = true)
     public List<OrderResponse> getAllOrders() {
-
         return orderRepository.findAll()
                 .stream()
                 .map(this::buildOrderResponse)
                 .toList();
     }
 
-    // GET ORDER BY ID
     @Transactional(readOnly = true)
     public OrderResponse getOrderById(Long id) {
-
-        Order order = orderRepository.findById(id).orElseThrow(()->
-                    new OrderNotFoundException(id)
-                );
-
-        return buildOrderResponse(order);
+        return buildOrderResponse(requireOrder(id));
     }
 
-    // BUILD COMPLETE ORDER RESPONSE
-    private OrderResponse buildOrderResponse(Order order) {
+    private Order requireOrder(Long orderId) {
+        return orderRepository.findById(orderId)
+                .orElseThrow(() -> new OrderNotFoundException(orderId));
+    }
 
+    private OrderResponse buildOrderResponse(Order order) {
         List<OrderItemResponse> items =
                 orderItemRepository.findByOrderId(order.id())
                         .stream()
-                        .map(item -> {
-
-                            BigDecimal subtotal = item.unitPrice()
-                                    .multiply(
-                                            BigDecimal.valueOf(item.quantity())
-                                    );
-
-                            return new OrderItemResponse(
-                                    item.id(),
-                                    item.productId(),
-                                    item.productName(),
-                                    item.quantity(),
-                                    item.unitPrice(),
-                                    subtotal
-                            );
-                        })
+                        .map(item -> new OrderItemResponse(
+                                item.id(),
+                                item.productId(),
+                                item.productName(),
+                                item.quantity(),
+                                item.unitPrice(),
+                                item.unitPrice().multiply(
+                                        BigDecimal.valueOf(item.quantity())
+                                )
+                        ))
                         .toList();
 
         return new OrderResponse(
@@ -304,5 +365,71 @@ public class OrderService {
                 order.priority(),
                 order.productionStatus()
         );
+    }
+
+    /**
+     * If the surrounding transaction rolls back after stock was reserved, the
+     * external reservation must be released so it does not leak.
+     */
+    private void registerRollbackRelease(String reference,
+                                         Map<Long, Integer> quantities) {
+
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCompletion(int status) {
+                        if (status == STATUS_COMMITTED) {
+                            return;
+                        }
+
+                        try {
+                            inventoryGrpcClient.releaseMaterials(
+                                    reference,
+                                    quantities
+                            );
+                        } catch (RuntimeException e) {
+                            log.error(
+                                    "Failed to release reservation {} "
+                                            + "after transaction rollback",
+                                    reference,
+                                    e
+                            );
+                        }
+                    }
+                }
+        );
+    }
+
+    private Map<Long, Integer> aggregateQuantities(
+            List<OrderItemRequest> items) {
+
+        Map<Long, Integer> quantities = new TreeMap<>();
+
+        for (OrderItemRequest item : items) {
+            quantities.merge(item.productId(), item.quantity(), Integer::sum);
+        }
+
+        return quantities;
+    }
+
+    private Map<Long, Integer> aggregateItemQuantities(
+            List<OrderItem> items) {
+
+        Map<Long, Integer> quantities = new TreeMap<>();
+
+        for (OrderItem item : items) {
+            quantities.merge(item.productId(), item.quantity(), Integer::sum);
+        }
+
+        return quantities;
+    }
+
+    private boolean isUnknownReservation(String message) {
+        return message != null
+                && message.startsWith("Unknown reservation reference");
     }
 }

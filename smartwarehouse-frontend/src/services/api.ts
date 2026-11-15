@@ -1,8 +1,10 @@
 import type {
-  BOMItem, CreateOrderRequest, Employee, EmployeeShift, EmployeeSkill,
-  EmployeeUnavailability, GeneratePlanRequest, InventoryItem, KanbanBin, Order,
-  PlanActionResponse, PlanDetails, PlanSummary, ProductionBom,
-  ProductionRouting, ProductionTask, RoutingOperation, WorkCenter,
+  BOMItem, CreateOrderRequest, CreateProductionLineRequest,
+  CreateWarehousePlotRequest, Employee, EmployeeShift, EmployeeSkill,
+  EmployeeUnavailability, GeneratePlanRequest, InventoryItem, KanbanBin,
+  Order, PlanActionResponse, PlanDetails, PlanSummary, PlanTaskRequest,
+  ProductionBom, ProductionLine, ProductionRouting, ProductionTask,
+  ReplenishPlanRequest, RoutingOperation, Warehouse, WarehousePlot, WorkCenter,
   WorkingCalendarEntry,
 } from '../types';
 
@@ -44,6 +46,10 @@ export const api = {
   getOrder: (id: number) => request<Order>(`/api/orders/${id}`),
   createOrder: (payload: CreateOrderRequest) =>
     post<Order>('/api/orders', payload),
+  confirmOrder: (id: number) =>
+    post<Order>(`/api/orders/${id}/confirm`),
+  completeOrder: (id: number) =>
+    post<Order>(`/api/orders/${id}/complete`),
   cancelOrder: (id: number) =>
     request<{ message?: string }>(`/api/orders/${id}`, { method: 'DELETE' }),
 
@@ -51,6 +57,9 @@ export const api = {
   getInventory: () => request<InventoryItem[]>('/api/inventory'),
   getBOM: () => request<BOMItem[]>('/api/inventory/bom'),
   getKanban: () => request<KanbanBin[]>('/api/inventory/kanban'),
+  getWarehouses: () => request<Warehouse[]>('/api/inventory/warehouses'),
+  createWarehousePlot: (warehouseId: number, payload: CreateWarehousePlotRequest) =>
+    post<WarehousePlot>(`/api/inventory/warehouses/${warehouseId}/plots`, payload),
 
   // -------------------------------------------------------------------------
   // Production Planning
@@ -59,6 +68,8 @@ export const api = {
   getPlan: (id: number) => request<PlanDetails>(`/api/production/plans/${id}`),
   generatePlan: (payload: GeneratePlanRequest) =>
     post<PlanSummary>('/api/production/plans/generate', payload),
+  replenishPlan: (payload: ReplenishPlanRequest) =>
+    post<PlanSummary>('/api/production/plans/replenish', payload),
   confirmPlan: (id: number) =>
     post<PlanActionResponse>(`/api/production/plans/${id}/confirm`),
   cancelPlan: (id: number) =>
@@ -74,7 +85,29 @@ export const api = {
   completeTask: (id: number) =>
     post<ProductionTask>(`/api/production/tasks/${id}/complete`),
 
+  // Manual plan editing (split an order into scheduled parts)
+  createPlanTask: (planId: number, payload: PlanTaskRequest) =>
+    post<ProductionTask>(`/api/production/plans/${planId}/tasks`, payload),
+  updatePlanTask: (planId: number, taskId: number, payload: PlanTaskRequest) =>
+    request<ProductionTask>(`/api/production/plans/${planId}/tasks/${taskId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+  deletePlanTask: (planId: number, taskId: number) =>
+    request<void>(`/api/production/plans/${planId}/tasks/${taskId}`, {
+      method: 'DELETE',
+    }),
+
   // Resources / configuration
+  getProductionLines: () => request<ProductionLine[]>('/api/production/lines'),
+  createProductionLine: (payload: CreateProductionLineRequest) =>
+    post<ProductionLine>('/api/production/lines', payload),
+  updateProductionLine: (id: number, payload: CreateProductionLineRequest) =>
+    request<ProductionLine>(`/api/production/lines/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+
   getWorkCenters: () => request<WorkCenter[]>('/api/production/work-centers'),
   createWorkCenter: (payload: Omit<WorkCenter, 'id'>) =>
     post<WorkCenter>('/api/production/work-centers', payload),

@@ -4,20 +4,35 @@ A responsive React + TypeScript + Tailwind CSS frontend for the SmartWarehouse d
 
 ## Features
 
-- Operations dashboard with order, inventory, value and low-stock metrics
+- Operations dashboard with order and production tracking tables plus order, inventory, value and low-stock metrics
 - Order list with status filters and search
-- Create orders with one or more inventory products
+- Order lifecycle: create → confirm (stock is checked; covered orders reserve stock, shortages queue production) → complete after production is done
+- Create orders with one or more inventory products and a delivery deadline; planning schedules earliest deadlines first and flags at-risk completions
 - View order details
 - Cancel orders; the backend releases reserved inventory through gRPC
 - Inventory table showing on-hand, reserved and available quantities
-- JIT Kanban board with live bin status, replenishment columns and stock/deployment age
-- Production planning board: generate draft plans, inspect risk/shortage metrics, view plan details, confirm or cancel plans
+- Inventory workspace: stock table plus a JIT Kanban tab with live bin status, replenishment columns and stock/deployment age
+- JIT replenishment: create a draft production plan up to bin capacity directly from a low-stock kanban card
+- Production completion adds finished goods to inventory and consumes the reserved BOM materials
+- Warehouse footprint: physical sites, plot/bucket assignments to products or materials, surface area, occupancy and utilization; add new plots from the page, with occupancy derived from live inventory
+- Production planning board: week-by-week timeline with previous/next navigation, generate draft plans from a chosen date and hour using production-line throughput, split orders into scheduled parts, add/edit/remove parts, inspect risk/shortage metrics, confirm or cancel plans
 - Task lifecycle actions: start and complete production tasks from a plan or the Gantt view
-- Gantt chart of allocated operations, grouped by work center, employee or operation
-- Resource management: work centers, employees, skills, shifts, unavailability and the working calendar
+- Gantt chart of production-line allocations, grouped by line, work center, employee or operation
+- Resource management: production lines with headcount and units-per-hour throughput, work centers and the working calendar
 - Production routing management: routing definitions and ordered operations with skills and processing times
 - Responsive sidebar and mobile layout
 - Loading, empty, success and API error states
+
+## Splitting an order into production parts
+
+1. Create the order with its delivery deadline, then confirm it (Orders → view order → Confirm).
+2. Open Production → Planning board and generate a draft plan for a window covering the due date.
+3. Open the drafted plan (Manage) and choose **Add production part**.
+4. Select the customer order line, enter a **partial quantity**, start/end date-time and production line.
+5. Repeat for additional parts on different days/hours; use Edit/Remove to adjust them.
+6. Confirm the plan when the parts are arranged.
+
+All parts stay in one plan and share the order; the order progresses as the parts complete. Splitting the same order across separate plans is not allocation-aware yet, so use multiple parts within one plan.
 
 ## Requirements
 
@@ -60,18 +75,29 @@ The frontend expects the API Gateway to expose these routes:
 | GET | `/api/orders` | List orders |
 | GET | `/api/orders/{id}` | Get order details |
 | POST | `/api/orders` | Create an order |
+| POST | `/api/orders/{id}/confirm` | Confirm an order, check stock and reserve/queue production |
+| POST | `/api/orders/{id}/complete` | Final order confirmation; consume and fulfil inventory |
 | DELETE | `/api/orders/{id}` | Cancel an order |
 | GET | `/api/inventory` | List inventory |
 | GET | `/api/inventory/bom` | List inventory BOM records |
 | GET | `/api/inventory/kanban` | JIT kanban bins with live status and age metrics |
+| GET | `/api/inventory/warehouses` | Warehouses with plots, assignments and space utilization |
+| POST | `/api/inventory/warehouses/{id}/plots` | Add a plot/bucket to a warehouse |
 | GET | `/api/production/plans` | List production plans |
 | POST | `/api/production/plans/generate` | Generate a draft plan |
+| POST | `/api/production/plans/replenish` | Generate a draft replenishment plan up to a target quantity |
+| POST | `/api/production/plans/{id}/tasks` | Add a scheduled production part to a draft plan |
+| PUT | `/api/production/plans/{id}/tasks/{taskId}` | Modify a scheduled production part |
+| DELETE | `/api/production/plans/{id}/tasks/{taskId}` | Remove a production part from a draft plan |
 | GET | `/api/production/plans/{id}` | Plan details with tasks, assignments and materials |
 | POST | `/api/production/plans/{id}/confirm` | Confirm a plan and reserve materials |
 | POST | `/api/production/plans/{id}/cancel` | Cancel a plan and release reservations |
 | GET | `/api/production/tasks?planId={id}` | List production tasks |
 | POST | `/api/production/tasks/{id}/start` | Start a production task |
 | POST | `/api/production/tasks/{id}/complete` | Complete a production task |
+| GET | `/api/production/lines` | List production lines with headcount and units/hour |
+| POST | `/api/production/lines` | Add a production line |
+| PUT | `/api/production/lines/{id}` | Update a production line's capacity |
 | GET | `/api/production/work-centers` | List work centers |
 | POST | `/api/production/work-centers` | Create a work center |
 | GET | `/api/production/employees` | List employees |
@@ -106,4 +132,4 @@ If the browser reports a CORS error, configure CORS in the Spring Cloud API Gate
 
 ## Current scope
 
-The backend supports Orders, Inventory and Production Planning, so those sections are connected. Products are listed in the Inventory page; there is no separate Products page. The Production workspace connects to the PPS service through the API Gateway, including plans, the Gantt chart, resources and routings. Warehouses and Suppliers are roadmap placeholders until their backend services and APIs are implemented. Revenue is calculated from order totals and is an operational order-value metric, not a payment or accounting ledger.
+The backend supports Orders, Inventory and Production Planning, so those sections are connected. Products are listed in the Inventory page; there is no separate Products page. The Production workspace connects to the PPS service through the API Gateway, including plans, the Gantt chart, resources and routings. Warehouses is connected to the inventory service's physical layout data; Suppliers remains a roadmap placeholder until its backend service and API are implemented. Revenue is calculated from order totals and is an operational order-value metric, not a payment or accounting ledger.

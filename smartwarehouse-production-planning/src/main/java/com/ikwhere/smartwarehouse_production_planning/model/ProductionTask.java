@@ -16,6 +16,7 @@ public record ProductionTask(
         String statusReason,
         LocalDateTime estimatedCompletion,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        LocalDateTime completedAt
 ) {
 }

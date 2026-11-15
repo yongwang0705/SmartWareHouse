@@ -56,6 +56,13 @@ public class MaterialRequirementRepository {
         );
     }
 
+    public void deleteByTaskId(Long taskId) {
+        jdbcTemplate.update(
+                "DELETE FROM production_material_requirement WHERE production_task_id = ?",
+                taskId
+        );
+    }
+
     public List<MaterialRequirement> findByPlanId(Long planId) {
         return jdbcTemplate.query("""
                 SELECT r.*
@@ -83,6 +90,16 @@ public class MaterialRequirementRepository {
                 UPDATE production_material_requirement r
                 SET reserved_quantity = 0,
                     status = 'RELEASED'
+                FROM production_task t
+                WHERE t.id = r.production_task_id
+                  AND t.plan_id = ?
+                """, planId);
+    }
+
+    public void markConsumedByPlan(Long planId) {
+        jdbcTemplate.update("""
+                UPDATE production_material_requirement r
+                SET status = 'CONSUMED'
                 FROM production_task t
                 WHERE t.id = r.production_task_id
                   AND t.plan_id = ?

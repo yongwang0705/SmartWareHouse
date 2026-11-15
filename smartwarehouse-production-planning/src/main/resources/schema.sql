@@ -29,11 +29,38 @@ CREATE TABLE IF NOT EXISTS production_task (
 
 ALTER TABLE production_task ADD COLUMN IF NOT EXISTS estimated_completion TIMESTAMP;
 ALTER TABLE production_task ADD COLUMN IF NOT EXISTS status_reason VARCHAR(1000);
+ALTER TABLE production_task ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP;
 
 CREATE INDEX IF NOT EXISTS idx_production_task_plan_id
     ON production_task (plan_id);
 CREATE INDEX IF NOT EXISTS idx_production_task_order_id
     ON production_task (order_id);
+
+CREATE TABLE IF NOT EXISTS production_line (
+    id BIGSERIAL PRIMARY KEY,
+    code VARCHAR(50) NOT NULL UNIQUE,
+    name VARCHAR(150) NOT NULL,
+    employees INT NOT NULL DEFAULT 0 CHECK (employees >= 0),
+    units_per_hour INT NOT NULL CHECK (units_per_hour > 0),
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS production_line_assignment (
+    id BIGSERIAL PRIMARY KEY,
+    production_task_id BIGINT NOT NULL
+        REFERENCES production_task(id) ON DELETE CASCADE,
+    line_id BIGINT NOT NULL REFERENCES production_line(id),
+    start_time TIMESTAMP NOT NULL,
+    end_time TIMESTAMP NOT NULL,
+    allocated_hours NUMERIC(10, 2) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_line_assignment_task
+    ON production_line_assignment (production_task_id);
+
+CREATE INDEX IF NOT EXISTS idx_line_assignment_line
+    ON production_line_assignment (line_id, start_time);
 
 CREATE TABLE IF NOT EXISTS product_bom (
     id BIGSERIAL PRIMARY KEY,

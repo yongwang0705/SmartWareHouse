@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
-  faArrowsRotate, faBusinessTime, faCalendarDays, faCalendarPlus,
-  faCheck, faCircleExclamation, faClock, faGear, faPlus,
-  faUserPlus, faUsers,
+  faArrowsRotate, faCalendarDays, faCalendarPlus, faCheck,
+  faCircleExclamation, faGaugeHigh, faIndustry, faPlus,
 } from '@fortawesome/free-solid-svg-icons';
 import Modal from '../../components/Modal';
 import StatCard from '../../components/StatCard';
@@ -13,14 +12,14 @@ import {
   addDays, formatDate, formatTime, toDateInput, todayInput,
 } from '../../utils/format';
 import type {
-  Employee, EmployeeShift, EmployeeSkill, EmployeeUnavailability,
-  WorkCenter, WorkingCalendarEntry,
+  CreateProductionLineRequest, ProductionLine, WorkCenter,
+  WorkingCalendarEntry,
 } from '../../types';
 
-type Section = 'employees' | 'workCenters' | 'calendar';
+type Section = 'lines' | 'workCenters' | 'calendar';
 
 const SECTIONS: Array<{ id: Section; label: string }> = [
-  { id: 'employees', label: 'Employees & skills' },
+  { id: 'lines', label: 'Production lines' },
   { id: 'workCenters', label: 'Work centers' },
   { id: 'calendar', label: 'Working calendar' },
 ];
@@ -29,9 +28,9 @@ const errorMessage = (err: unknown) =>
   err instanceof Error ? err.message : 'Unexpected error';
 
 export default function ResourceManagement() {
-  const [section, setSection] = useState<Section>('employees');
+  const [section, setSection] = useState<Section>('lines');
+  const [lines, setLines] = useState<ProductionLine[]>([]);
   const [workCenters, setWorkCenters] = useState<WorkCenter[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
   const [calendar, setCalendar] = useState<WorkingCalendarEntry[]>([]);
   const [calendarFrom, setCalendarFrom] = useState(() => toDateInput(addDays(new Date(), -7)));
   const [calendarTo, setCalendarTo] = useState(() => toDateInput(addDays(new Date(), 30)));
@@ -40,10 +39,10 @@ export default function ResourceManagement() {
   const [error, setError] = useState('');
   const [flash, setFlash] = useState<{ message: string; error: boolean } | null>(null);
 
+  const [lineFormOpen, setLineFormOpen] = useState(false);
+  const [editingLine, setEditingLine] = useState<ProductionLine | null>(null);
   const [workCenterForm, setWorkCenterForm] = useState(false);
-  const [employeeForm, setEmployeeForm] = useState(false);
   const [calendarForm, setCalendarForm] = useState(false);
-  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
 
   const showFlash = useCallback(
     (message: string, isError = false) => setFlash({ message, error: isError }),
@@ -60,12 +59,12 @@ export default function ResourceManagement() {
     setLoading(true);
     setError('');
     try {
-      const [centers, people] = await Promise.all([
+      const [lineData, centerData] = await Promise.all([
+        api.getProductionLines(),
         api.getWorkCenters(),
-        api.getEmployees(),
       ]);
-      setWorkCenters(centers);
-      setEmployees(people);
+      setLines(Array.isArray(lineData) ? lineData : []);
+      setWorkCenters(Array.isArray(centerData) ? centerData : []);
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -87,8 +86,9 @@ export default function ResourceManagement() {
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { void loadCalendar(calendarFrom, calendarTo); }, [loadCalendar]); // initial range only
 
-  const activeWorkCenters = workCenters.filter((center) => center.active).length;
-  const activeEmployees = employees.filter((employee) => employee.active).length;
+  const activeLines = lines.filter((line) => line.active).length;
+  const totalEmployees = lines.reduce((sum, line) => sum + line.employees, 0);
+  const hourlyCapacity = lines.reduce((sum, line) => sum + line.unitsPerHour, 0);
   const workingDays = calendar.filter((entry) => entry.workingDay).length;
 
   const headerAction = (() => {
@@ -98,7 +98,11 @@ export default function ResourceManagement() {
     if (section === 'calendar') {
       return <button className="button button-primary" onClick={() => setCalendarForm(true)}><FontAwesomeIcon icon={faCalendarPlus} /> Add calendar entry</button>;
     }
-    return <button className="button button-primary" onClick={() => setEmployeeForm(true)}><FontAwesomeIcon icon={faUserPlus} /> Add employee</button>;
+    return (
+      <button className="button button-primary" onClick={() => { setEditingLine(null); setLineFormOpen(true); }}>
+        <FontAwesomeIcon icon={faPlus} /> Add production line
+      </button>
+    );
   })();
 
   return (
@@ -106,7 +110,7 @@ export default function ResourceManagement() {
       <div className="page-toolbar compact-toolbar">
         <div>
           <h2>Resource management</h2>
-          <p>Employees, skills, shifts, work-center capacity and the plant working calendar.</p>
+          <p>Production lines, work-center reference and the plant working calendar.</p>
         </div>
         <div className="toolbar-actions">
           <button className="button button-secondary" onClick={() => void load()}>
@@ -125,31 +129,128 @@ export default function ResourceManagement() {
       )}
 
       <div className="stats-grid stats-grid-small stats-grid-three">
-        <StatCard label="WORK CENTERS" value={String(workCenters.length)} detail={`${activeWorkCenters} active`} icon={faGear} tone="blue" />
-        <StatCard label="EMPLOYEES" value={String(employees.length)} detail={`${activeEmployees} active`} icon={faUsers} tone="green" />
-        <StatCard label="WORKING DAYS" value={String(workingDays)} detail={`${formatDate(calendarFrom)} → ${formatDate(calendarTo)}`} icon={faCalendarDays} tone="violet" />
+        <StatCard
+          label="PRODUCTION LINES"
+          value={String(lines.length)}
+          detail={`${activeLines} active · ${totalEmployees} employees`}
+          icon={faIndustry}
+          tone="blue"
+        />
+        <StatCard
+          label="HOURLY CAPACITY"
+          value={`${hourlyCapacity.toLocaleString('en-CA')}`}
+          detail="Units per hour across lines"
+          icon={faGaugeHigh}
+          tone="green"
+        />
+        <StatCard
+          label="WORKING DAYS"
+          value={String(workingDays)}
+          detail={`${formatDate(calendarFrom)} → ${formatDate(calendarTo)}`}
+          icon={faCalendarDays}
+          tone="violet"
+        />
       </div>
 
       <div className="segmented section-tabs">
         {SECTIONS.map((item) => (
-          <button key={item.id} className={section === item.id ? 'segmented-active' : ''} onClick={() => setSection(item.id)}>
+          <button
+            key={item.id}
+            className={section === item.id ? 'segmented-active' : ''}
+            onClick={() => setSection(item.id)}
+          >
             {item.label}
           </button>
         ))}
       </div>
 
       {loading ? (
-        <div className="loading-panel"><span className="spinner" /><strong>Loading resources...</strong><span>Fetching work centers and employees</span></div>
+        <div className="loading-panel">
+          <span className="spinner" />
+          <strong>Loading resources...</strong>
+          <span>Fetching production lines and work centers</span>
+        </div>
       ) : (
         <>
+          {section === 'lines' && (
+            <>
+              <div className="table-card">
+                <div className="table-heading">
+                  <div>
+                    <h3>Production lines</h3>
+                    <p>Throughput is units assembled per hour; employee count is line headcount.</p>
+                  </div>
+                </div>
+                <div className="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>LINE</th>
+                        <th>EMPLOYEES</th>
+                        <th>UNITS / HOUR</th>
+                        <th>STATUS</th>
+                        <th>ACTIONS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lines.map((line) => (
+                        <tr key={line.id}>
+                          <td>
+                            <strong>{line.name}</strong>
+                            <div className="cell-sub">{line.code}</div>
+                          </td>
+                          <td>{line.employees}</td>
+                          <td><strong>{line.unitsPerHour}</strong> units/h</td>
+                          <td>
+                            <span className={`status-pill status-${line.active ? 'confirmed' : 'cancelled'}`}>
+                              <i />{line.active ? 'Active' : 'Inactive'}
+                            </span>
+                          </td>
+                          <td>
+                            <button
+                              className="mini-button"
+                              onClick={() => { setEditingLine(line); setLineFormOpen(true); }}
+                            >
+                              Edit
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {lines.length === 0 && (
+                        <tr>
+                          <td colSpan={5}>
+                            <div className="empty-state">No production lines configured.</div>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className="plan-hint">
+                <FontAwesomeIcon icon={faIndustry} />
+                <span>
+                  A line's throughput converts units into production hours. For example,
+                  a 200 units/hour line assembles 200 units every hour; a 50 units/hour
+                  line needs four times as long for the same quantity.
+                </span>
+              </div>
+            </>
+          )}
+
           {section === 'workCenters' && (
             <div className="table-card">
               <div className="table-heading">
-                <div><h3>Work centers</h3><p>Daily capacity available for operation scheduling</p></div>
+                <div>
+                  <h3>Work centers</h3>
+                  <p>Reference capacity used by routings; production lines drive scheduling.</p>
+                </div>
               </div>
               <div className="table-scroll">
                 <table>
-                  <thead><tr><th>CODE</th><th>NAME</th><th>CAPACITY / DAY</th><th>STATUS</th></tr></thead>
+                  <thead>
+                    <tr><th>CODE</th><th>NAME</th><th>CAPACITY / DAY</th><th>STATUS</th></tr>
+                  </thead>
                   <tbody>
                     {workCenters.map((center) => (
                       <tr key={center.id}>
@@ -163,52 +264,13 @@ export default function ResourceManagement() {
                         </td>
                       </tr>
                     ))}
-                    {workCenters.length === 0 && <tr><td colSpan={4}><div className="empty-state">No work centers configured.</div></td></tr>}
+                    {workCenters.length === 0 && (
+                      <tr><td colSpan={4}><div className="empty-state">No work centers configured.</div></td></tr>
+                    )}
                   </tbody>
                 </table>
               </div>
             </div>
-          )}
-
-          {section === 'employees' && (
-            <>
-              <div className="table-card">
-                <div className="table-heading">
-                  <div><h3>Employees</h3><p>Select an employee to manage skills, shifts and unavailability</p></div>
-                </div>
-                <div className="table-scroll">
-                  <table>
-                    <thead><tr><th>EMPLOYEE</th><th>NUMBER</th><th>STATUS</th><th>ACTIONS</th></tr></thead>
-                    <tbody>
-                      {employees.map((employee) => (
-                        <tr key={employee.id} className={selectedEmployee?.id === employee.id ? 'row-expanded' : ''}>
-                          <td><strong>{employee.name}</strong></td>
-                          <td className="muted-cell">{employee.employeeNumber}</td>
-                          <td>
-                            <span className={`status-pill status-${employee.active ? 'confirmed' : 'cancelled'}`}>
-                              <i />{employee.active ? 'Active' : 'Inactive'}
-                            </span>
-                          </td>
-                          <td>
-                            <button className="mini-button" onClick={() => setSelectedEmployee(selectedEmployee?.id === employee.id ? null : employee)}>
-                              {selectedEmployee?.id === employee.id ? 'Hide details' : 'Manage'}
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                      {employees.length === 0 && <tr><td colSpan={4}><div className="empty-state">No employees configured.</div></td></tr>}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              {selectedEmployee && (
-                <EmployeeDetail
-                  employee={selectedEmployee}
-                  onClose={() => setSelectedEmployee(null)}
-                  onFlash={showFlash}
-                />
-              )}
-            </>
           )}
 
           {section === 'calendar' && (
@@ -253,6 +315,21 @@ export default function ResourceManagement() {
         </>
       )}
 
+      {lineFormOpen && (
+        <LineForm
+          line={editingLine ?? undefined}
+          onClose={() => { setLineFormOpen(false); setEditingLine(null); }}
+          onSaved={(line) => {
+            setLines((current) => [
+              ...current.filter((item) => item.id !== line.id),
+              line,
+            ].sort((a, b) => a.code.localeCompare(b.code)));
+            setLineFormOpen(false);
+            setEditingLine(null);
+            showFlash(`Production line ${line.code} saved.`);
+          }}
+        />
+      )}
       {workCenterForm && (
         <WorkCenterForm
           onClose={() => setWorkCenterForm(false)}
@@ -260,16 +337,6 @@ export default function ResourceManagement() {
             setWorkCenters((current) => [...current, center]);
             setWorkCenterForm(false);
             showFlash(`Work center ${center.code} created.`);
-          }}
-        />
-      )}
-      {employeeForm && (
-        <EmployeeForm
-          onClose={() => setEmployeeForm(false)}
-          onCreated={(employee) => {
-            setEmployees((current) => [...current, employee]);
-            setEmployeeForm(false);
-            showFlash(`Employee ${employee.name} created.`);
           }}
         />
       )}
@@ -292,222 +359,133 @@ export default function ResourceManagement() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Employee detail: skills, shifts and unavailability
-// ---------------------------------------------------------------------------
-
-interface EmployeeDetailProps {
-  employee: Employee;
+interface LineFormProps {
+  line?: ProductionLine;
   onClose: () => void;
-  onFlash: (message: string, isError?: boolean) => void;
+  onSaved: (line: ProductionLine) => void;
 }
 
-function EmployeeDetail({ employee, onClose, onFlash }: EmployeeDetailProps) {
-  const [skills, setSkills] = useState<EmployeeSkill[]>([]);
-  const [shifts, setShifts] = useState<EmployeeShift[]>([]);
-  const [unavailability, setUnavailability] = useState<EmployeeUnavailability[]>([]);
-  const [loading, setLoading] = useState(true);
+function LineForm({ line, onClose, onSaved }: LineFormProps) {
+  const editing = Boolean(line);
+  const [code, setCode] = useState(line?.code ?? '');
+  const [name, setName] = useState(line?.name ?? '');
+  const [employees, setEmployees] = useState(String(line?.employees ?? 50));
+  const [unitsPerHour, setUnitsPerHour] = useState(String(line?.unitsPerHour ?? 50));
+  const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState('');
 
-  const loadDetails = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [skillData, shiftData, unavailableData] = await Promise.all([
-        api.getEmployeeSkills(employee.id),
-        api.getEmployeeShifts(employee.id),
-        api.getEmployeeUnavailability(employee.id),
-      ]);
-      setSkills(skillData);
-      setShifts(shiftData);
-      setUnavailability(unavailableData);
-    } catch (err) {
-      onFlash(errorMessage(err), true);
-    } finally {
-      setLoading(false);
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setFormError('');
+
+    const headcount = Number(employees);
+    const throughput = Number(unitsPerHour);
+
+    if (!code.trim() || !name.trim()) {
+      setFormError('Code and name are required.');
+      return;
     }
-  }, [employee.id, onFlash]);
+    if (!Number.isInteger(headcount) || headcount < 0) {
+      setFormError('Employees must be a non-negative whole number.');
+      return;
+    }
+    if (!Number.isInteger(throughput) || throughput <= 0) {
+      setFormError('Units per hour must be a positive whole number.');
+      return;
+    }
 
-  useEffect(() => { void loadDetails(); }, [loadDetails]);
+    const payload: CreateProductionLineRequest = {
+      code: code.trim().toUpperCase(),
+      name: name.trim(),
+      employees: headcount,
+      unitsPerHour: throughput,
+    };
+
+    setBusy(true);
+    try {
+      onSaved(editing && line
+        ? await api.updateProductionLine(line.id, payload)
+        : await api.createProductionLine(payload));
+    } catch (err) {
+      setFormError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
-    <div className="detail-panel">
-      <div className="detail-panel-head">
-        <div>
-          <div className="eyebrow">EMPLOYEE #{employee.employeeNumber}</div>
-          <h3>{employee.name}</h3>
+    <Modal
+      eyebrow="PRODUCTION SETUP"
+      title={editing ? 'Edit production line' : 'Add production line'}
+      subtitle="Define the line's headcount and how many units it can assemble each hour."
+      onClose={onClose}
+      footer={<>
+        <button type="button" className="button button-ghost" onClick={onClose}>Cancel</button>
+        <button type="submit" form="line-form" className="button button-primary" disabled={busy}>
+          {busy ? 'Saving...' : editing ? 'Save line' : 'Add line'}
+        </button>
+      </>}
+    >
+      <form id="line-form" onSubmit={submit}>
+        <div className="form-grid">
+          <label className="field-label">
+            Line code
+            <input
+              className="form-input"
+              value={code}
+              onChange={(event) => setCode(event.target.value)}
+              placeholder="LINE-C"
+              disabled={editing}
+              required
+            />
+          </label>
+          <label className="field-label">
+            Line name
+            <input
+              className="form-input"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Assembly Line C"
+              required
+            />
+          </label>
+          <label className="field-label">
+            Employees
+            <input
+              className="form-input"
+              type="number"
+              min="0"
+              step="1"
+              value={employees}
+              onChange={(event) => setEmployees(event.target.value)}
+              required
+            />
+          </label>
+          <label className="field-label">
+            Units per hour
+            <input
+              className="form-input"
+              type="number"
+              min="1"
+              step="1"
+              value={unitsPerHour}
+              onChange={(event) => setUnitsPerHour(event.target.value)}
+              required
+            />
+          </label>
         </div>
-        <button className="mini-button" onClick={onClose}>Close</button>
-      </div>
-
-      {loading ? (
-        <div className="loading-inline"><span className="spinner" /> Loading employee configuration...</div>
-      ) : (
-        <div className="resource-grid">
-          <section className="resource-column">
-            <h4><FontAwesomeIcon icon={faBusinessTime} /> Skills</h4>
-            <ul className="resource-list">
-              {skills.map((skill) => (
-                <li key={skill.id}><span>{skill.skillCode}</span><small>{skill.proficiency}</small></li>
-              ))}
-              {skills.length === 0 && <li className="empty-inline">No skills recorded.</li>}
-            </ul>
-            <SkillForm
-              employeeId={employee.id}
-              onCreated={(skill) => {
-                setSkills((current) => [
-                  ...current.filter((item) => item.skillCode !== skill.skillCode),
-                  skill,
-                ]);
-                onFlash(`Skill ${skill.skillCode} added.`);
-              }}
-              onError={(message) => onFlash(message, true)}
-            />
-          </section>
-
-          <section className="resource-column">
-            <h4><FontAwesomeIcon icon={faClock} /> Shifts</h4>
-            <ul className="resource-list">
-              {shifts.map((shift) => (
-                <li key={shift.id}>
-                  <span>{formatTime(shift.shiftStart)} – {formatTime(shift.shiftEnd)}</span>
-                  <small>{shift.workingDays}</small>
-                </li>
-              ))}
-              {shifts.length === 0 && <li className="empty-inline">No shifts recorded.</li>}
-            </ul>
-            <ShiftForm
-              employeeId={employee.id}
-              onCreated={(shift) => { setShifts((current) => [...current, shift]); onFlash('Shift added.'); }}
-              onError={(message) => onFlash(message, true)}
-            />
-          </section>
-
-          <section className="resource-column">
-            <h4><FontAwesomeIcon icon={faCalendarDays} /> Unavailability</h4>
-            <ul className="resource-list">
-              {unavailability.map((item) => (
-                <li key={item.id}>
-                  <span>{formatDate(item.startTime)} → {formatDate(item.endTime)}</span>
-                  <small>{item.reason || 'Leave'}</small>
-                </li>
-              ))}
-              {unavailability.length === 0 && <li className="empty-inline">No unavailability recorded.</li>}
-            </ul>
-            <UnavailabilityForm
-              employeeId={employee.id}
-              onCreated={(item) => { setUnavailability((current) => [...current, item]); onFlash('Unavailability added.'); }}
-              onError={(message) => onFlash(message, true)}
-            />
-          </section>
+        {formError && <div className="form-error">{formError}</div>}
+        <div className="plan-hint">
+          <FontAwesomeIcon icon={faIndustry} />
+          <span>
+            Throughput sets production duration: 200 units/hour means 200 units in
+            one hour; 500 units take 2.5 hours on that line.
+          </span>
         </div>
-      )}
-    </div>
+      </form>
+    </Modal>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Small inline forms
-// ---------------------------------------------------------------------------
-
-interface InlineFormProps<T> {
-  employeeId: number;
-  onCreated: (value: T) => void;
-  onError: (message: string) => void;
-}
-
-function SkillForm({ employeeId, onCreated, onError }: InlineFormProps<EmployeeSkill>) {
-  const [skillCode, setSkillCode] = useState('ASSEMBLY');
-  const [proficiency, setProficiency] = useState('INTERMEDIATE');
-  const [busy, setBusy] = useState(false);
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    try {
-      onCreated(await api.createEmployeeSkill(employeeId, { skillCode: skillCode.trim().toUpperCase(), proficiency }));
-      setSkillCode('');
-    } catch (err) {
-      onError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <form className="inline-form" onSubmit={submit}>
-      <input className="form-input" placeholder="Skill code" value={skillCode} onChange={(event) => setSkillCode(event.target.value)} required />
-      <select className="form-input" value={proficiency} onChange={(event) => setProficiency(event.target.value)}>
-        {['BEGINNER', 'INTERMEDIATE', 'ADVANCED', 'EXPERT'].map((level) => <option key={level}>{level}</option>)}
-      </select>
-      <button className="mini-button mini-button-success" disabled={busy} type="submit">
-        <FontAwesomeIcon icon={faPlus} /> Add
-      </button>
-    </form>
-  );
-}
-
-function ShiftForm({ employeeId, onCreated, onError }: InlineFormProps<EmployeeShift>) {
-  const [shiftStart, setShiftStart] = useState('08:00');
-  const [shiftEnd, setShiftEnd] = useState('17:00');
-  const [workingDays, setWorkingDays] = useState('MON,TUE,WED,THU,FRI');
-  const [busy, setBusy] = useState(false);
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    try {
-      onCreated(await api.createEmployeeShift(employeeId, { shiftStart, shiftEnd, workingDays }));
-    } catch (err) {
-      onError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <form className="inline-form inline-form-stack" onSubmit={submit}>
-      <div className="inline-form-row">
-        <input className="form-input" type="time" value={shiftStart} onChange={(event) => setShiftStart(event.target.value)} required />
-        <input className="form-input" type="time" value={shiftEnd} onChange={(event) => setShiftEnd(event.target.value)} required />
-      </div>
-      <input className="form-input" placeholder="Working days" value={workingDays} onChange={(event) => setWorkingDays(event.target.value)} required />
-      <button className="mini-button mini-button-success" disabled={busy} type="submit"><FontAwesomeIcon icon={faPlus} /> Add shift</button>
-    </form>
-  );
-}
-
-function UnavailabilityForm({ employeeId, onCreated, onError }: InlineFormProps<EmployeeUnavailability>) {
-  const [startTime, setStartTime] = useState(`${todayInput()}T08:00`);
-  const [endTime, setEndTime] = useState(`${todayInput()}T17:00`);
-  const [reason, setReason] = useState('Leave');
-  const [busy, setBusy] = useState(false);
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    try {
-      onCreated(await api.createEmployeeUnavailability(employeeId, { startTime, endTime, reason }));
-    } catch (err) {
-      onError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <form className="inline-form inline-form-stack" onSubmit={submit}>
-      <div className="inline-form-row">
-        <input className="form-input" type="datetime-local" value={startTime} onChange={(event) => setStartTime(event.target.value)} required />
-        <input className="form-input" type="datetime-local" value={endTime} onChange={(event) => setEndTime(event.target.value)} required />
-      </div>
-      <input className="form-input" placeholder="Reason" value={reason} onChange={(event) => setReason(event.target.value)} />
-      <button className="mini-button mini-button-success" disabled={busy} type="submit"><FontAwesomeIcon icon={faPlus} /> Add leave</button>
-    </form>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Modal forms
-// ---------------------------------------------------------------------------
 
 interface FormModalProps<T> {
   onClose: () => void;
@@ -543,7 +521,7 @@ function WorkCenterForm({ onClose, onCreated }: FormModalProps<WorkCenter>) {
     <Modal
       eyebrow="PRODUCTION SETUP"
       title="Create work center"
-      subtitle="Capacity is the maximum number of production hours available per working day."
+      subtitle="Reference capacity for routings and operations."
       onClose={onClose}
       footer={<>
         <button type="button" className="button button-ghost" onClick={onClose}>Cancel</button>
@@ -555,51 +533,6 @@ function WorkCenterForm({ onClose, onCreated }: FormModalProps<WorkCenter>) {
           <label className="field-label">Code<input className="form-input" value={code} onChange={(event) => setCode(event.target.value)} placeholder="WC-ASSEMBLY" required /></label>
           <label className="field-label">Name<input className="form-input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Assembly A" required /></label>
           <label className="field-label">Capacity hours / day<input className="form-input" type="number" min="0.5" step="0.5" value={capacityHoursPerDay} onChange={(event) => setCapacityHoursPerDay(event.target.value)} required /></label>
-        </div>
-        {formError && <div className="form-error">{formError}</div>}
-      </form>
-    </Modal>
-  );
-}
-
-function EmployeeForm({ onClose, onCreated }: FormModalProps<Employee>) {
-  const [employeeNumber, setEmployeeNumber] = useState('');
-  const [name, setName] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [formError, setFormError] = useState('');
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    setFormError('');
-    setBusy(true);
-    try {
-      onCreated(await api.createEmployee({
-        employeeNumber: employeeNumber.trim().toUpperCase(),
-        name: name.trim(),
-        active: true,
-      }));
-    } catch (err) {
-      setFormError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Modal
-      eyebrow="PRODUCTION SETUP"
-      title="Create employee"
-      subtitle="Add skills and shifts after creating the employee."
-      onClose={onClose}
-      footer={<>
-        <button type="button" className="button button-ghost" onClick={onClose}>Cancel</button>
-        <button type="submit" form="employee-form" className="button button-primary" disabled={busy}>{busy ? 'Creating...' : 'Create employee'}</button>
-      </>}
-    >
-      <form id="employee-form" onSubmit={submit}>
-        <div className="form-grid">
-          <label className="field-label">Employee number<input className="form-input" value={employeeNumber} onChange={(event) => setEmployeeNumber(event.target.value)} placeholder="EMP-D" required /></label>
-          <label className="field-label">Name<input className="form-input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Employee D" required /></label>
         </div>
         {formError && <div className="form-error">{formError}</div>}
       </form>
@@ -657,7 +590,7 @@ function CalendarEntryForm({ onClose, onCreated }: FormModalProps<WorkingCalenda
           <label className="field-label form-span-2">Description<input className="form-input" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Regular working day" /></label>
         </div>
         {formError && <div className="form-error">{formError}</div>}
-        <div className="plan-hint"><FontAwesomeIcon icon={faCheck} /><span>The calendar drives shift-boundary validation in the scheduling engine.</span></div>
+        <div className="plan-hint"><FontAwesomeIcon icon={faCheck} /><span>The calendar controls production lines' available hours.</span></div>
       </form>
     </Modal>
   );

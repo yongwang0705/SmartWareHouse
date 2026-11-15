@@ -22,6 +22,31 @@ public class MockProductCatalogClient implements ProductCatalogClient{
                     103L,
                     "Mouse",
                     new BigDecimal("25.00")
+            ),
+            201L, new ProductDetails(
+                    201L,
+                    "Keycap Set",
+                    new BigDecimal("15.00")
+            ),
+            202L, new ProductDetails(
+                    202L,
+                    "Key Switch Set",
+                    new BigDecimal("30.00")
+            ),
+            203L, new ProductDetails(
+                    203L,
+                    "Keyboard PCB",
+                    new BigDecimal("40.00")
+            ),
+            204L, new ProductDetails(
+                    204L,
+                    "USB-C Cable",
+                    new BigDecimal("8.00")
+            ),
+            205L, new ProductDetails(
+                    205L,
+                    "Keyboard Case",
+                    new BigDecimal("20.00")
             )
     );
 

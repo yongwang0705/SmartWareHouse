@@ -50,7 +50,12 @@ INSERT INTO product_bom
     (product_id, material_product_id, quantity_per_unit, active)
 VALUES
     (101, 102, 1, TRUE),
-    (101, 103, 1, TRUE)
+    (101, 103, 1, TRUE),
+    (102, 201, 1, TRUE),
+    (102, 202, 1, TRUE),
+    (102, 203, 1, TRUE),
+    (102, 204, 1, TRUE),
+    (102, 205, 1, TRUE)
 ON CONFLICT (product_id, material_product_id) DO NOTHING;
 
 INSERT INTO production_routing (product_id, name, active)
@@ -163,3 +168,9 @@ WHERE r.product_id = 103
   AND r.name = 'Mouse Standard Routing'
   AND w.code = 'WC-PACKAGING'
 ON CONFLICT (routing_id, sequence_number) DO NOTHING;
+
+INSERT INTO production_line (code, name, employees, units_per_hour, active)
+VALUES
+    ('LINE-A', 'Assembly Line A', 200, 200, TRUE),
+    ('LINE-B', 'Assembly Line B', 50, 50, TRUE)
+ON CONFLICT (code) DO NOTHING;

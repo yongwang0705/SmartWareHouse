@@ -232,6 +232,8 @@
    --------------------------------------------------------------------- */
 
 .kanban-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:13px}
+.kanban-scope{display:inline-flex;align-items:center;gap:6px;font-size:8px;font-weight:800;color:#5c76a2}
+.kanban-scope svg{color:#4d7fd5}
 .kanban-legend{display:flex;align-items:center;gap:11px;font-size:8px;color:#8b97a9}
 .kanban-legend .kanban-dot{margin-right:-6px}
 .kanban-dot{width:7px;height:7px;flex:none;border-radius:50%;display:inline-block}
@@ -239,7 +241,8 @@
 .kanban-dot-low{background:#e8a33c}
 .kanban-dot-reorder{background:#e07a2f}
 .kanban-dot-critical{background:#d35a61}
-.kanban-board{display:grid;grid-template-columns:repeat(4,minmax(225px,1fr));gap:13px;align-items:start}
+.kanban-dot-over{background:#8061d6}
+.kanban-board{display:grid;grid-template-columns:repeat(5,minmax(190px,1fr));gap:13px;align-items:start}
 .kanban-column{background:#f7f9fc;border:1px solid #e8edf3;border-radius:10px;padding:11px;min-height:220px}
 .kanban-column-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:2px 3px 10px;border-bottom:1px solid #e9edf3;margin-bottom:10px}
 .kanban-column-title{display:flex;align-items:center;gap:7px}
@@ -252,6 +255,7 @@
 .kanban-card-low{border-left-color:#e8a33c}
 .kanban-card-reorder{border-left-color:#e07a2f}
 .kanban-card-critical{border-left-color:#d35a61}
+.kanban-card-over{border-left-color:#8061d6}
 .kanban-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
 .kanban-card h4{font-size:10px;margin:0;color:#243147}
 .kanban-sku{display:block;font-size:8px;color:#98a2b1;margin-top:3px;word-break:break-all}
@@ -267,12 +271,14 @@
 .kanban-fill-low{background:#e8a33c}
 .kanban-fill-reorder{background:#e07a2f}
 .kanban-fill-critical{background:#d35a61}
+.kanban-fill-over{background:#8061d6}
 .kanban-facts{display:flex;flex-wrap:wrap;gap:5px 12px;margin-top:9px;font-size:8px;color:#8b97a9}
 .kanban-facts strong{color:#526074;font-weight:800}
 .kanban-ages{display:flex;flex-wrap:wrap;gap:5px 12px;margin-top:9px;padding-top:8px;border-top:1px solid #f0f2f6;font-size:8px;color:#98a2b1}
 .kanban-ages span{display:inline-flex;align-items:center;gap:4px}
 .kanban-ages svg{font-size:7px;color:#b1bbc8}
 .kanban-trigger-age{color:#b57324}
+.kanban-actions{display:flex;justify-content:flex-end;margin-top:8px}
 .kanban-empty{padding:18px 10px;text-align:center;color:#a2acb9;font-size:9px;border:1px dashed #e3e8ef;border-radius:8px;background:#fbfcfe}
 .kanban-note{display:flex;align-items:flex-start;gap:7px;margin:14px 0 0;padding:10px 12px;border:1px solid #e5ebf5;background:#f0f5ff;border-radius:8px;font-size:8px;line-height:1.6;color:#7788a4}
 .kanban-note svg{margin-top:1px;color:#4d7fd5}
@@ -284,3 +290,222 @@
   .kanban-board{grid-template-columns:1fr}
   .kanban-legend{display:none}
 }
+
+/* JIT marker used in the inventory stock table */
+.jit-badge{
+  margin-left:6px;
+  padding:2px 5px;
+  border-radius:4px;
+  background:#e9f8f0;
+  color:#218c5f;
+  font-size:7px;
+  font-weight:800;
+  letter-spacing:.5px;
+}
+
+/* ---------------------------------------------------------------------
+   Warehouse footprint
+   --------------------------------------------------------------------- */
+
+.warehouse-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.warehouse-filter{flex-wrap:wrap;margin-bottom:0}
+.warehouse-search{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  height:34px;
+  min-width:250px;
+  padding:0 10px;
+  border:1px solid #e3e8ef;
+  border-radius:8px;
+  background:#fff;
+  color:#98a2b1;
+}
+.warehouse-search input{
+  border:0;
+  outline:0;
+  background:transparent;
+  font-size:9px;
+  color:#344258;
+  width:100%;
+}
+.warehouse-card{
+  background:#fff;
+  border:1px solid #e8edf3;
+  border-radius:10px;
+  padding:16px;
+  box-shadow:0 2px 7px #1c2b4205;
+  margin-bottom:15px;
+}
+.warehouse-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:13px}
+.warehouse-head-actions{display:flex;align-items:center;gap:6px;flex:none}
+.warehouse-title{display:flex;align-items:center;gap:8px;color:#4d7fd5}
+.warehouse-title h3{font-size:13px;margin:0;color:#243147}
+.warehouse-code{
+  font-size:8px;
+  font-weight:800;
+  color:#64748b;
+  background:#eef2f8;
+  border-radius:4px;
+  padding:3px 6px;
+  letter-spacing:.4px;
+}
+.warehouse-address{display:flex;align-items:center;gap:6px;font-size:8px;color:#98a2b1;margin:5px 0 0}
+.warehouse-address svg{color:#aeb9ca}
+.warehouse-metrics{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:10px;
+  background:#f7f9fc;
+  border:1px solid #edf0f5;
+  border-radius:8px;
+  padding:12px 14px;
+}
+.warehouse-metrics>div:not(.warehouse-meter){display:flex;flex-direction:column;gap:5px}
+.warehouse-metrics small{font-size:7px;font-weight:800;letter-spacing:.5px;color:#98a2b1}
+.warehouse-metrics strong{font-size:11px;color:#344258}
+.warehouse-meter{grid-column:1/-1;height:6px;border-radius:10px;background:#e9edf3;overflow:hidden}
+.warehouse-meter span{display:block;height:100%;border-radius:10px;background:linear-gradient(90deg,#4d7fd5,#35b98a)}
+.warehouse-plot-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:16px 0 9px}
+.warehouse-plot-head h4{font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:#64748b;margin:0}
+.warehouse-plot-head span{font-size:8px;color:#98a2b1}
+.warehouse-plot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:10px}
+.plot-card{
+  border:1px solid #e8edf3;
+  border-radius:9px;
+  padding:11px 12px;
+  background:#fff;
+  display:flex;
+  flex-direction:column;
+  gap:7px;
+}
+.plot-card-empty{border-style:dashed;background:#fbfcfe}
+.plot-card-full{border-color:#f2dfb4;background:#fffcf5}
+.plot-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.plot-code{font-size:9px;font-weight:800;color:#243147;letter-spacing:.3px}
+.plot-type{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  font-size:7px;
+  font-weight:800;
+  letter-spacing:.4px;
+  color:#5c76a2;
+  background:#eef3fb;
+  border-radius:4px;
+  padding:3px 5px;
+}
+.plot-type svg{font-size:7px}
+.plot-card h5{font-size:9px;margin:0;color:#3b485c;font-weight:700}
+.plot-assignment{display:flex;align-items:center;flex-wrap:wrap;gap:5px;min-height:20px;font-size:8px;color:#8b97a9}
+.plot-assignment strong{font-size:9px;color:#344258}
+.plot-assignment small{font-size:7px;color:#98a2b1}
+.plot-kind{font-size:6.5px;font-weight:800;letter-spacing:.4px;border-radius:3px;padding:2px 4px}
+.plot-kind-product{background:#f0ebff;color:#7860cf}
+.plot-kind-material{background:#eef2f8;color:#64748b}
+.plot-unassigned{color:#a2acb9;font-style:italic}
+.plot-metrics{display:flex;justify-content:space-between;gap:8px;font-size:8px;color:#8b97a9}
+.plot-metrics strong{color:#526074}
+.plot-meter{height:5px;border-radius:10px;background:#edf0f5;overflow:hidden}
+.plot-meter span{display:block;height:100%;border-radius:10px;background:#5a8ee4}
+.plot-fill-full{background:#e8a33c}
+.plot-fill-empty{background:#cbd5e1}
+.plot-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:7.5px;color:#98a2b1}
+.plot-status{font-size:7px;font-weight:800;letter-spacing:.4px;border-radius:4px;padding:3px 5px;background:#edf4ff;color:#4b79c5}
+.plot-status-empty{background:#eef2f8;color:#8894a4}
+.plot-status-full{background:#fff4de;color:#b57324}
+
+@media(max-width:850px){
+  .warehouse-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .warehouse-search{min-width:0;flex:1}
+}
+
+/* ---------------------------------------------------------------------
+   Dashboard tracking tables
+   --------------------------------------------------------------------- */
+
+.track-card{margin-bottom:15px}
+.track-progress{display:flex;align-items:center;gap:8px;min-width:160px}
+.track-meter{height:6px;flex:1;min-width:90px;border-radius:10px;background:#edf0f5;overflow:hidden}
+.track-meter span{display:block;height:100%;border-radius:10px;background:#5a8ee4}
+.track-fill-done{background:#35b98a}
+.track-fill-active{background:#5a8ee4}
+.track-fill-idle{background:#cbd5e1}
+.track-fill-warn{background:#e8a33c}
+.track-progress-label{font-size:8px;color:#7c8797;white-space:nowrap}
+
+/* ---------------------------------------------------------------------
+   Plan timeline and manual production parts
+   --------------------------------------------------------------------- */
+
+.detail-section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:21px 0 8px}
+.detail-section-head .detail-section-title{margin:0}
+.plan-timeline{background:#f7f9fc;border:1px solid #edf0f5;border-radius:8px;padding:10px 12px;margin:14px 0 4px;overflow-x:auto}
+.plan-timeline-axis{position:relative;height:18px;margin-left:180px;border-bottom:1px solid #e3e8ef;min-width:420px}
+.plan-timeline-axis span{position:absolute;top:0;transform:translateX(-50%);font-size:7px;color:#98a2b1;white-space:nowrap}
+.plan-timeline-row{display:flex;align-items:center;gap:10px;margin-top:8px;min-width:600px}
+.plan-timeline-label{width:170px;min-width:170px;display:flex;flex-direction:column;gap:2px}
+.plan-timeline-label strong{font-size:9px;color:#344258}
+.plan-timeline-label small{font-size:8px;color:#98a2b1}
+.plan-timeline-track{position:relative;flex:1;height:26px;background:#eef2f7;border-radius:6px;overflow:hidden;min-width:300px}
+.plan-timeline-grid{position:absolute;top:0;bottom:0;width:1px;background:#dde4ee}
+.plan-timeline-bar{position:absolute;top:4px;height:18px;border-radius:4px;background:#dbe8ff;color:#2c5ca8;font-size:8px;font-weight:700;display:flex;align-items:center;padding:0 6px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;box-shadow:0 1px 3px #1e293b1a}
+.plan-timeline-bar.status-in-progress{background:#e9e2ff;color:#664bc0}
+.plan-timeline-bar.status-completed{background:#d9f4e7;color:#1d8357}
+.plan-timeline-bar.status-at-risk{background:#ffefd1;color:#a66a13}
+.plan-timeline-bar.status-material-shortage,
+.plan-timeline-bar.status-capacity-shortage,
+.plan-timeline-bar.status-cancelled{background:#ffe1e3;color:#b93c46}
+
+/* ---------------------------------------------------------------------
+   Weekly production timeline
+   --------------------------------------------------------------------- */
+
+.week-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.week-nav{display:flex;align-items:center;gap:5px}
+.week-range{font-size:10px;font-weight:800;color:#344258}
+.week-timeline-scroll{overflow-x:auto;margin-bottom:14px}
+.week-timeline{min-width:900px;background:#fff;border:1px solid #e8edf3;border-radius:10px;overflow:hidden;box-shadow:0 2px 7px #1c2b4205}
+.week-head{display:flex;background:#fafbfd;border-bottom:1px solid #eef1f5}
+.week-label-col{width:220px;min-width:220px;padding:10px 12px;border-right:1px solid #eef1f5;font-size:8px;font-weight:800;letter-spacing:.6px;color:#98a2b0;text-transform:uppercase;display:flex;align-items:center}
+.week-days{display:grid;grid-template-columns:repeat(7,1fr);flex:1}
+.week-day{min-width:0;padding:8px 4px;border-left:1px solid #eef1f5;text-align:center}
+.week-day:first-child{border-left:0}
+.week-day span{display:block;font-size:7px;text-transform:uppercase;letter-spacing:.5px;color:#98a2b1}
+.week-day strong{display:block;font-size:9px;color:#3b485c;margin-top:2px}
+.week-day-today{background:#eef5ff}
+.week-actions-col{width:82px;min-width:82px;border-left:1px solid #eef1f5;display:flex;align-items:center;justify-content:center}
+.week-plan-row{display:flex;align-items:stretch;background:#f7f9fc;border-bottom:1px solid #eef1f5;border-top:1px solid #eef1f5}
+.week-plan-label{width:220px;min-width:220px;padding:7px 12px;border-right:1px solid #eef1f5;display:flex;flex-direction:column;justify-content:center;gap:2px}
+.week-plan-label small{font-size:7.5px;color:#98a2b1}
+.week-plan-track{position:relative;flex:1;min-height:36px}
+.week-plan-span{position:absolute;top:13px;height:10px;border-radius:4px;background:#cfe0ff;z-index:1}
+.week-task-row{display:flex;align-items:stretch;border-bottom:1px solid #f2f4f8;background:#fff}
+.week-task-row:hover{background:#fbfcff}
+.week-task-label{width:220px;min-width:220px;padding:7px 12px;border-right:1px solid #eef1f5;display:flex;flex-direction:column;justify-content:center;gap:2px}
+.week-task-label strong{font-size:9px;color:#3b485c}
+.week-task-label small{font-size:7.5px;color:#98a2b1}
+.week-task-track{position:relative;flex:1;height:34px}
+.week-day-grid{position:absolute;inset:0;display:grid;grid-template-columns:repeat(7,1fr);z-index:0}
+.week-day-cell{border-left:1px solid #f2f4f8}
+.week-day-cell:first-child{border-left:0}
+.week-day-cell.week-day-today{background:#f6faff}
+.week-task-bar{position:absolute;top:8px;height:18px;border:0;border-radius:4px;background:#dbe8ff;color:#2c5ca8;font-size:7.5px;font-weight:700;padding:0 6px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 1px 3px #1e293b1a;cursor:pointer;z-index:2}
+.week-task-bar.status-in-progress{background:#e9e2ff;color:#664bc0}
+.week-task-bar.status-completed{background:#d9f4e7;color:#1d8357}
+.week-task-bar.status-at-risk{background:#ffefd1;color:#a66a13}
+.week-task-bar.status-material-shortage,
+.week-task-bar.status-capacity-shortage,
+.week-task-bar.status-cancelled{background:#ffe1e3;color:#b93c46}
+.week-other-plans{display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:10px 12px;background:#f7f9fc;border:1px solid #edf0f5;border-radius:8px;margin-bottom:12px;font-size:8px;color:#7c8797}
+.week-other-plans>span{font-weight:800;text-transform:uppercase;letter-spacing:.4px;margin-right:4px}
+.week-unscheduled{display:flex;flex-direction:column;gap:7px;padding:12px;background:#fffaf0;border:1px solid #f2e4c9;border-radius:8px;margin-bottom:12px}
+.week-unscheduled>strong{font-size:9px;color:#9a6b12;text-transform:uppercase;letter-spacing:.4px}
+
+/* Generate plan linked-order preview */
+.generate-order-list{display:grid;gap:6px;max-height:190px;overflow:auto;margin:0 0 10px}
+.generate-order-row{display:grid;grid-template-columns:130px 1fr auto;gap:10px;align-items:center;padding:8px 10px;background:#f7f9fc;border:1px solid #edf0f5;border-radius:6px}
+.generate-order-row strong{font-size:9px;color:#344258}
+.generate-order-row small{display:block;font-size:7.5px;color:#98a2b1;margin-top:2px}
+.generate-order-items{display:flex;flex-wrap:wrap;gap:4px 6px;font-size:8px;color:#526074}
+.generate-order-items span{background:#fff;border:1px solid #eef1f5;border-radius:4px;padding:2px 5px;white-space:nowrap}
