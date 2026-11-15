@@ -328,18 +328,8 @@ public class InventoryRepository {
 
         String plotSql = """
                 SELECT p.id, p.warehouse_id, p.code, p.name, p.plot_type,
-                       p.surface_area,
-                       CASE
-                           WHEN p.capacity_units > 0 THEN LEAST(
-                               p.surface_area,
-                               p.surface_area
-                                   * COALESCE(i.quantity, p.occupied_units)::numeric
-                                   / p.capacity_units
-                           )
-                           ELSE p.occupied_area
-                       END AS occupied_area,
-                       p.product_id, p.capacity_units,
-                       COALESCE(i.quantity, p.occupied_units) AS occupied_units,
+                       p.surface_area, p.occupied_area,
+                       p.product_id, p.capacity_units, p.occupied_units,
                        i.product_name, i.is_product
                 FROM warehouse_plot p
                 LEFT JOIN inventory i ON i.product_id = p.product_id
@@ -448,6 +438,248 @@ public class InventoryRepository {
                 ));
     }
 
+    public boolean warehousePlotExists(Long warehouseId, Long plotId) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM warehouse_plot
+                WHERE id = ? AND warehouse_id = ?
+                """, Integer.class, plotId, warehouseId);
+
+        return count != null && count > 0;
+    }
+
+    public boolean warehousePlotCodeExists(Long warehouseId,
+                                           String code,
+                                           Long excludePlotId) {
+        Integer count = excludePlotId == null
+                ? jdbcTemplate.queryForObject("""
+                        SELECT COUNT(*)
+                        FROM warehouse_plot
+                        WHERE warehouse_id = ? AND code = ?
+                        """, Integer.class, warehouseId, code)
+                : jdbcTemplate.queryForObject("""
+                        SELECT COUNT(*)
+                        FROM warehouse_plot
+                        WHERE warehouse_id = ? AND code = ? AND id <> ?
+                        """, Integer.class, warehouseId, code, excludePlotId);
+
+        return count != null && count > 0;
+    }
+
+    public int updateWarehousePlot(
+            Long warehouseId,
+            Long plotId,
+            String code,
+            String name,
+            String plotType,
+            BigDecimal surfaceArea,
+            BigDecimal occupiedArea,
+            Long productId,
+            Integer capacityUnits,
+            Integer occupiedUnits) {
+
+        return jdbcTemplate.update("""
+                UPDATE warehouse_plot
+                SET code = ?,
+                    name = ?,
+                    plot_type = ?,
+                    surface_area = ?,
+                    occupied_area = ?,
+                    product_id = ?,
+                    capacity_units = ?,
+                    occupied_units = ?
+                WHERE id = ? AND warehouse_id = ?
+                """,
+                code,
+                name,
+                plotType,
+                surfaceArea,
+                occupiedArea,
+                productId,
+                capacityUnits,
+                occupiedUnits,
+                plotId,
+                warehouseId
+        );
+    }
+
+    public int deleteWarehousePlot(Long warehouseId, Long plotId) {
+        return jdbcTemplate.update("""
+                DELETE FROM warehouse_plot
+                WHERE id = ? AND warehouse_id = ?
+                """, plotId, warehouseId);
+    }
+
+    /**
+     * Removes units from the source plot. Moving the whole quantity clears the
+     * assignment and releases the plotted area so the plot becomes EMPTY.
+     */
+    public int removePlotUnits(Long plotId,
+                               int quantity,
+                               boolean clearAssignment,
+                               BigDecimal occupiedArea) {
+        if (clearAssignment) {
+            return jdbcTemplate.update("""
+                    UPDATE warehouse_plot
+                    SET product_id = NULL,
+                        occupied_units = 0,
+                        occupied_area = 0
+                    WHERE id = ? AND occupied_units = ?
+                    """, plotId, quantity);
+        }
+
+        return jdbcTemplate.update("""
+                UPDATE warehouse_plot
+                SET occupied_units = occupied_units - ?,
+                    occupied_area = GREATEST(0, occupied_area - ?)
+                WHERE id = ? AND occupied_units >= ?
+                """, quantity, occupiedArea, plotId, quantity);
+    }
+
+    public int addPlotUnits(Long plotId,
+                            Long productId,
+                            int quantity,
+                            boolean assignProduct,
+                            BigDecimal occupiedArea) {
+        if (assignProduct) {
+            return jdbcTemplate.update("""
+                    UPDATE warehouse_plot
+                    SET product_id = ?,
+                        occupied_units = occupied_units + ?,
+                        occupied_area = LEAST(
+                            surface_area,
+                            occupied_area + ?
+                        )
+                    WHERE id = ?
+                      AND (capacity_units = 0 OR occupied_units + ? <= capacity_units)
+                    """, productId, quantity, occupiedArea, plotId, quantity);
+        }
+
+        return jdbcTemplate.update("""
+                UPDATE warehouse_plot
+                SET occupied_units = occupied_units + ?,
+                    occupied_area = LEAST(
+                        surface_area,
+                        occupied_area + ?
+                    )
+                WHERE id = ?
+                  AND (capacity_units = 0 OR occupied_units + ? <= capacity_units)
+                """, quantity, occupiedArea, plotId, quantity);
+    }
+
+    public int totalPlotUnitsForProduct(Long productId) {
+        Integer total = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(occupied_units), 0)
+                FROM warehouse_plot
+                WHERE product_id = ?
+                """, Integer.class, productId);
+
+        return total == null ? 0 : total;
+    }
+
+    public boolean orderStorageExists(Long orderId) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM warehouse_order_storage
+                WHERE order_id = ?
+                """, Integer.class, orderId);
+
+        return count != null && count > 0;
+    }
+
+    public List<OrderStorageRow> findOrderStorage(Long orderId) {
+        return jdbcTemplate.query("""
+                SELECT order_id, plot_id, product_id, quantity
+                FROM warehouse_order_storage
+                WHERE order_id = ?
+                ORDER BY id
+                """, (rs, rowNum) -> new OrderStorageRow(
+                rs.getLong("order_id"),
+                rs.getLong("plot_id"),
+                rs.getLong("product_id"),
+                rs.getInt("quantity")
+        ), orderId);
+    }
+
+    public List<OrderStorageRow> findPlotOrderStorage(Long plotId) {
+        return jdbcTemplate.query("""
+                SELECT order_id, plot_id, product_id, quantity
+                FROM warehouse_order_storage
+                WHERE plot_id = ?
+                ORDER BY id
+                """, (rs, rowNum) -> new OrderStorageRow(
+                rs.getLong("order_id"),
+                rs.getLong("plot_id"),
+                rs.getLong("product_id"),
+                rs.getInt("quantity")
+        ), plotId);
+    }
+
+    public int mergeOrderStorage(Long orderId,
+                                 Long plotId,
+                                 Long productId,
+                                 Integer quantity) {
+        return jdbcTemplate.update("""
+                INSERT INTO warehouse_order_storage
+                    (order_id, plot_id, product_id, quantity)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT (order_id, plot_id, product_id)
+                DO UPDATE SET quantity =
+                    warehouse_order_storage.quantity + EXCLUDED.quantity
+                """, orderId, plotId, productId, quantity);
+    }
+
+    public int decrementOrderStorage(Long orderId,
+                                     Long plotId,
+                                     Long productId,
+                                     Integer quantity) {
+        return jdbcTemplate.update("""
+                UPDATE warehouse_order_storage
+                SET quantity = quantity - ?
+                WHERE order_id = ?
+                  AND plot_id = ?
+                  AND product_id = ?
+                  AND quantity >= ?
+                """, quantity, orderId, plotId, productId, quantity);
+    }
+
+    public int deleteOrderStorageRow(Long orderId,
+                                     Long plotId,
+                                     Long productId) {
+        return jdbcTemplate.update("""
+                DELETE FROM warehouse_order_storage
+                WHERE order_id = ?
+                  AND plot_id = ?
+                  AND product_id = ?
+                """, orderId, plotId, productId);
+    }
+
+    public int saveOrderStorage(Long orderId,
+                                Long plotId,
+                                Long productId,
+                                Integer quantity) {
+        return jdbcTemplate.update("""
+                INSERT INTO warehouse_order_storage
+                    (order_id, plot_id, product_id, quantity)
+                VALUES (?, ?, ?, ?)
+                """, orderId, plotId, productId, quantity);
+    }
+
+    public int deleteOrderStorage(Long orderId) {
+        return jdbcTemplate.update("""
+                DELETE FROM warehouse_order_storage
+                WHERE order_id = ?
+                """, orderId);
+    }
+
+    public record OrderStorageRow(
+            Long orderId,
+            Long plotId,
+            Long productId,
+            Integer quantity
+    ) {
+    }
+
     public Optional<WarehousePlotResponse> findWarehousePlotById(Long id) {
         String sql = """
                 SELECT p.id, p.code, p.name, p.plot_type,
@@ -472,11 +704,13 @@ public class InventoryRepository {
         int occupiedUnits = rs.getInt("occupied_units");
         double occupancyPercent = percent(occupiedArea, surfaceArea);
 
+        // Status follows the quantity in the plot: a plot is FULL only when
+        // its unit capacity is reached. Occupied floor area is informational
+        // and must not make a half-empty plot look full.
         String status;
-        if (occupiedUnits == 0 && occupancyPercent == 0) {
+        if (occupiedUnits <= 0) {
             status = "EMPTY";
-        } else if (occupancyPercent >= 90
-                || (capacityUnits > 0 && occupiedUnits >= capacityUnits)) {
+        } else if (capacityUnits > 0 && occupiedUnits >= capacityUnits) {
             status = "FULL";
         } else {
             status = "OCCUPIED";

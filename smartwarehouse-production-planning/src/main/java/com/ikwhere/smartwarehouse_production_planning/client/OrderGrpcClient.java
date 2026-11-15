@@ -1,5 +1,7 @@
 package com.ikwhere.smartwarehouse_production_planning.client;
 
+import com.ikwhere.smartwarehouse.grpc.GetOrderRequirementsRequest;
+import com.ikwhere.smartwarehouse.grpc.GetOrderRequirementsResponse;
 import com.ikwhere.smartwarehouse.grpc.GetPendingProductionOrdersRequest;
 import com.ikwhere.smartwarehouse.grpc.GetPendingProductionOrdersResponse;
 import com.ikwhere.smartwarehouse.grpc.OrderServiceGrpc;
@@ -37,6 +39,16 @@ public class OrderGrpcClient {
                 );
 
         return response.getOrdersList();
+    }
+
+    public GetOrderRequirementsResponse getOrderRequirements(Long orderId) {
+        return orderStub
+                .withDeadlineAfter(DEADLINE_SECONDS, TimeUnit.SECONDS)
+                .getOrderRequirements(
+                        GetOrderRequirementsRequest.newBuilder()
+                                .setOrderId(orderId)
+                                .build()
+                );
     }
 
     public UpdateProductionStatusResponse updateProductionStatus(

@@ -79,6 +79,24 @@ CREATE TABLE IF NOT EXISTS warehouse_plot (
 CREATE INDEX IF NOT EXISTS idx_warehouse_plot_warehouse
     ON warehouse_plot (warehouse_id);
 
+-- Order-specific stock placed in warehouse plots. This records which plots
+-- hold how many units for an order so shipping can release the locations.
+CREATE TABLE IF NOT EXISTS warehouse_order_storage (
+    id BIGSERIAL PRIMARY KEY,
+    order_id BIGINT NOT NULL,
+    plot_id BIGINT NOT NULL REFERENCES warehouse_plot(id) ON DELETE CASCADE,
+    product_id BIGINT NOT NULL REFERENCES inventory(product_id),
+    quantity INT NOT NULL CHECK (quantity > 0),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_order_plot_storage
+        UNIQUE (order_id, plot_id, product_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_order_storage_order
+    ON warehouse_order_storage (order_id);
+CREATE INDEX IF NOT EXISTS idx_order_storage_plot
+    ON warehouse_order_storage (plot_id);
+
 CREATE TABLE IF NOT EXISTS production_work_orders (
     work_order_id BIGSERIAL PRIMARY KEY,
     product_id BIGINT NOT NULL,

@@ -10,6 +10,11 @@ service OrderService {
 
   rpc UpdateProductionStatus (UpdateProductionStatusRequest)
       returns (UpdateProductionStatusResponse);
+
+  // Returns the ordered quantities for an order so production planning can
+  // decide when the order has actually been produced in full.
+  rpc GetOrderRequirements (GetOrderRequirementsRequest)
+      returns (GetOrderRequirementsResponse);
 }
 
 message GetPendingProductionOrdersRequest {
@@ -50,4 +55,19 @@ message UpdateProductionStatusRequest {
 message UpdateProductionStatusResponse {
   bool success = 1;
   string message = 2;
+}
+
+message GetOrderRequirementsRequest {
+  int64 order_id = 1;
+}
+
+message OrderRequirementDto {
+  int64 product_id = 1;
+  string product_name = 2;
+  int32 quantity = 3;
+}
+
+message GetOrderRequirementsResponse {
+  bool found = 1;
+  repeated OrderRequirementDto items = 2;
 }

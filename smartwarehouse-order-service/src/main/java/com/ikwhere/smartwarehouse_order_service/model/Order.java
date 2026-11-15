@@ -11,6 +11,14 @@ public record Order(
         LocalDateTime createdAt,
         LocalDateTime dueDate,
         String priority,
-        String productionStatus
+        String productionStatus,
+        String deliveryMode,
+        String deliveryCarrier,
+        String deliveryDestination,
+        BigDecimal deliveryDistanceKm,
+        Integer deliveryTransitDays,
+        BigDecimal deliveryPrice,
+        String deliveryContainer,
+        LocalDateTime deliveredAt
 ) {
 }

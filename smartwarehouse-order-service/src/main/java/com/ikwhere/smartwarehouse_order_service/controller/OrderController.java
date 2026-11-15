@@ -2,7 +2,9 @@ package com.ikwhere.smartwarehouse_order_service.controller;
 
 
 import com.ikwhere.smartwarehouse_order_service.dto.CreateOrderRequest;
+import com.ikwhere.smartwarehouse_order_service.dto.DeliverySelectionRequest;
 import com.ikwhere.smartwarehouse_order_service.dto.OrderResponse;
+import com.ikwhere.smartwarehouse_order_service.dto.StoreOrderRequest;
 import com.ikwhere.smartwarehouse_order_service.model.Order;
 import com.ikwhere.smartwarehouse_order_service.service.OrderService;
 import jakarta.validation.Valid;
@@ -54,6 +56,22 @@ public class OrderController {
     @PostMapping("/{id}/complete")
     public ResponseEntity<OrderResponse> completeOrder(@PathVariable Long id) {
         return ResponseEntity.ok(orderService.completeOrder(id));
+    }
+
+    @PostMapping("/{id}/store")
+    public ResponseEntity<OrderResponse> storeOrder(
+            @PathVariable Long id,
+            @Valid @RequestBody StoreOrderRequest request
+    ) {
+        return ResponseEntity.ok(orderService.storeOrder(id, request));
+    }
+
+    @PostMapping("/{id}/ship")
+    public ResponseEntity<OrderResponse> shipOrder(
+            @PathVariable Long id,
+            @Valid @RequestBody DeliverySelectionRequest delivery
+    ) {
+        return ResponseEntity.ok(orderService.shipOrder(id, delivery));
     }
 
     @DeleteMapping("/{id}")

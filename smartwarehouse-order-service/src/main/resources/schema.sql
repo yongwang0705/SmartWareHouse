@@ -22,6 +22,18 @@ ALTER TABLE orders ALTER COLUMN due_date SET NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_orders_due_date ON orders (due_date);
 CREATE INDEX IF NOT EXISTS idx_orders_production_status ON orders (production_status);
 
+-- Delivery plan selected by the user when an order is completed. These
+-- columns are null for orders that completed before delivery planning or
+-- were completed without a plan.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_mode VARCHAR(20);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_carrier VARCHAR(120);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_destination VARCHAR(160);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_distance_km NUMERIC(10, 2);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_transit_days INT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_price NUMERIC(12, 2);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_container VARCHAR(120);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP;
+
 CREATE TABLE IF NOT EXISTS order_items (
     id BIGSERIAL PRIMARY KEY,
     order_id BIGINT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,

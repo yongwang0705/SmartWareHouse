@@ -15,12 +15,19 @@ import com.ikwhere.smartwarehouse.grpc.InventoryServiceGrpc;
 import com.ikwhere.smartwarehouse.grpc.GetInventoryRequest;
 import com.ikwhere.smartwarehouse.grpc.InventoryResponse;
 import com.ikwhere.smartwarehouse.grpc.MaterialReservationItem;
+import com.ikwhere.smartwarehouse.grpc.OrderStorageAllocation;
 import com.ikwhere.smartwarehouse.grpc.ReleaseMaterialsRequest;
 import com.ikwhere.smartwarehouse.grpc.ReleaseMaterialsResponse;
+import com.ikwhere.smartwarehouse.grpc.ReleaseOrderStorageRequest;
+import com.ikwhere.smartwarehouse.grpc.ReleaseOrderStorageResponse;
 import com.ikwhere.smartwarehouse.grpc.ReserveMaterialsRequest;
 import com.ikwhere.smartwarehouse.grpc.ReserveMaterialsResponse;
 import com.ikwhere.smartwarehouse.grpc.ReserveStockRequest;
 import com.ikwhere.smartwarehouse.grpc.ReserveStockResponse;
+import com.ikwhere.smartwarehouse.grpc.ShipStoredOrderRequest;
+import com.ikwhere.smartwarehouse.grpc.ShipStoredOrderResponse;
+import com.ikwhere.smartwarehouse.grpc.StoreOrderStorageRequest;
+import com.ikwhere.smartwarehouse.grpc.StoreOrderStorageResponse;
 
 import io.grpc.stub.StreamObserver;
 
@@ -238,6 +245,106 @@ public class InventoryGrpcService
                     .build());
             responseObserver.onCompleted();
         }
+    }
+
+    @Override
+    public void storeOrderStorage(
+            StoreOrderStorageRequest request,
+            StreamObserver<StoreOrderStorageResponse> responseObserver) {
+
+        try {
+            List<InventoryService.OrderStorageAllocation> allocations =
+                    request.getAllocationsList().stream()
+                            .map(this::toStorageAllocation)
+                            .toList();
+
+            InventoryService.BatchOperationResult result =
+                    inventoryService.storeOrderStorage(
+                            request.getOrderId(),
+                            allocations
+                    );
+
+            responseObserver.onNext(StoreOrderStorageResponse.newBuilder()
+                    .setSuccess(result.success())
+                    .setMessage(result.message())
+                    .build());
+            responseObserver.onCompleted();
+
+        } catch (Exception e) {
+            responseObserver.onNext(StoreOrderStorageResponse.newBuilder()
+                    .setSuccess(false)
+                    .setMessage(e.getMessage() != null
+                            ? e.getMessage()
+                            : "Order storage failed")
+                    .build());
+            responseObserver.onCompleted();
+        }
+    }
+
+    @Override
+    public void shipStoredOrder(
+            ShipStoredOrderRequest request,
+            StreamObserver<ShipStoredOrderResponse> responseObserver) {
+
+        try {
+            InventoryService.BatchOperationResult result =
+                    inventoryService.shipStoredOrder(
+                            request.getOrderId(),
+                            request.getReservationReference(),
+                            toQuantityMap(request.getItemsList())
+                    );
+
+            responseObserver.onNext(ShipStoredOrderResponse.newBuilder()
+                    .setSuccess(result.success())
+                    .setMessage(result.message())
+                    .build());
+            responseObserver.onCompleted();
+
+        } catch (Exception e) {
+            responseObserver.onNext(ShipStoredOrderResponse.newBuilder()
+                    .setSuccess(false)
+                    .setMessage(e.getMessage() != null
+                            ? e.getMessage()
+                            : "Stored order shipment failed")
+                    .build());
+            responseObserver.onCompleted();
+        }
+    }
+
+    @Override
+    public void releaseOrderStorage(
+            ReleaseOrderStorageRequest request,
+            StreamObserver<ReleaseOrderStorageResponse> responseObserver) {
+
+        try {
+            InventoryService.BatchOperationResult result =
+                    inventoryService.releaseOrderStorage(request.getOrderId());
+
+            responseObserver.onNext(ReleaseOrderStorageResponse.newBuilder()
+                    .setSuccess(result.success())
+                    .setMessage(result.message())
+                    .build());
+            responseObserver.onCompleted();
+
+        } catch (Exception e) {
+            responseObserver.onNext(ReleaseOrderStorageResponse.newBuilder()
+                    .setSuccess(false)
+                    .setMessage(e.getMessage() != null
+                            ? e.getMessage()
+                            : "Order storage release failed")
+                    .build());
+            responseObserver.onCompleted();
+        }
+    }
+
+    private InventoryService.OrderStorageAllocation toStorageAllocation(
+            OrderStorageAllocation allocation) {
+
+        return new InventoryService.OrderStorageAllocation(
+                allocation.getPlotId(),
+                allocation.getProductId(),
+                allocation.getQuantity()
+        );
     }
 
     private Map<Long, Integer> toQuantityMap(List<MaterialReservationItem> items) {

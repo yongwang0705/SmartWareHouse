@@ -1,6 +1,8 @@
 package com.ikwhere.smartwarehouse_inventory.service;
 
 import com.ikwhere.smartwarehouse_inventory.dto.CreateWarehousePlotRequest;
+import com.ikwhere.smartwarehouse_inventory.dto.MovePlotItemsRequest;
+import com.ikwhere.smartwarehouse_inventory.dto.MovePlotItemsResponse;
 import com.ikwhere.smartwarehouse_inventory.dto.WarehousePlotResponse;
 import com.ikwhere.smartwarehouse_inventory.model.Inventory;
 import com.ikwhere.smartwarehouse_inventory.model.MaterialReservation;
@@ -9,7 +11,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -28,6 +32,13 @@ public class InventoryService {
     }
 
     public record BatchOperationResult(boolean success, String message) {
+    }
+
+    public record OrderStorageAllocation(
+            Long plotId,
+            Long productId,
+            Integer quantity
+    ) {
     }
 
     @Transactional(readOnly = true)
@@ -60,6 +71,556 @@ public class InventoryService {
                     "Warehouse not found: " + warehouseId
             );
         }
+
+        ValidatedPlot plot = validatePlotRequest(request);
+
+        if (inventoryRepository.warehousePlotCodeExists(
+                warehouseId, plot.code(), null)) {
+            throw new IllegalStateException(
+                    "A plot with this code already exists in this warehouse"
+            );
+        }
+
+        return inventoryRepository.saveWarehousePlot(
+                warehouseId,
+                plot.code(),
+                plot.name(),
+                plot.plotType(),
+                plot.surfaceArea(),
+                plot.occupiedArea(),
+                plot.productId(),
+                plot.capacityUnits(),
+                plot.occupiedUnits()
+        );
+    }
+
+    @Transactional
+    public WarehousePlotResponse updateWarehousePlot(
+            Long warehouseId,
+            Long plotId,
+            CreateWarehousePlotRequest request) {
+
+        if (!inventoryRepository.warehouseExists(warehouseId)) {
+            throw new IllegalArgumentException(
+                    "Warehouse not found: " + warehouseId
+            );
+        }
+
+        if (!inventoryRepository.warehousePlotExists(warehouseId, plotId)) {
+            throw new IllegalArgumentException(
+                    "Plot not found in this warehouse: " + plotId
+            );
+        }
+
+        ValidatedPlot plot = validatePlotRequest(request);
+
+        if (inventoryRepository.warehousePlotCodeExists(
+                warehouseId, plot.code(), plotId)) {
+            throw new IllegalStateException(
+                    "A plot with this code already exists in this warehouse"
+            );
+        }
+
+        int updated = inventoryRepository.updateWarehousePlot(
+                warehouseId,
+                plotId,
+                plot.code(),
+                plot.name(),
+                plot.plotType(),
+                plot.surfaceArea(),
+                plot.occupiedArea(),
+                plot.productId(),
+                plot.capacityUnits(),
+                plot.occupiedUnits()
+        );
+
+        if (updated != 1) {
+            throw new IllegalStateException(
+                    "Could not update plot: " + plotId
+            );
+        }
+
+        return inventoryRepository.findWarehousePlotById(plotId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Could not load the updated plot: " + plotId
+                ));
+    }
+
+    @Transactional
+    public void deleteWarehousePlot(Long warehouseId, Long plotId) {
+        if (!inventoryRepository.warehouseExists(warehouseId)) {
+            throw new IllegalArgumentException(
+                    "Warehouse not found: " + warehouseId
+            );
+        }
+
+        if (!inventoryRepository.warehousePlotExists(warehouseId, plotId)) {
+            throw new IllegalArgumentException(
+                    "Plot not found in this warehouse: " + plotId
+            );
+        }
+
+        int deleted = inventoryRepository.deleteWarehousePlot(
+                warehouseId,
+                plotId
+        );
+
+        if (deleted != 1) {
+            throw new IllegalStateException(
+                    "Could not delete plot: " + plotId
+            );
+        }
+    }
+
+    /**
+     * Moves a quantity of the item assigned to the source plot into another
+     * plot in the same warehouse. Destination plots must be empty or already
+     * assigned to the same item, and must have enough remaining capacity.
+     */
+    @Transactional
+    public MovePlotItemsResponse moveWarehousePlotItems(
+            Long warehouseId,
+            Long sourcePlotId,
+            MovePlotItemsRequest request) {
+
+        if (!inventoryRepository.warehouseExists(warehouseId)) {
+            throw new IllegalArgumentException(
+                    "Warehouse not found: " + warehouseId
+            );
+        }
+
+        Long destinationPlotId = request.destinationPlotId();
+
+        if (sourcePlotId.equals(destinationPlotId)) {
+            throw new IllegalStateException(
+                    "Source and destination plots must be different"
+            );
+        }
+
+        if (!inventoryRepository.warehousePlotExists(
+                warehouseId, sourcePlotId)) {
+            throw new IllegalArgumentException(
+                    "Source plot not found in this warehouse: "
+                            + sourcePlotId
+            );
+        }
+
+        if (!inventoryRepository.warehousePlotExists(
+                warehouseId, destinationPlotId)) {
+            throw new IllegalArgumentException(
+                    "Destination plot not found in this warehouse: "
+                            + destinationPlotId
+            );
+        }
+
+        WarehousePlotResponse source = inventoryRepository
+                .findWarehousePlotById(sourcePlotId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Source plot not found: " + sourcePlotId
+                ));
+        WarehousePlotResponse destination = inventoryRepository
+                .findWarehousePlotById(destinationPlotId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Destination plot not found: " + destinationPlotId
+                ));
+
+        if (source.productId() == null) {
+            throw new IllegalStateException(
+                    "Source plot has no assigned product or material"
+            );
+        }
+
+        int quantity = request.quantity();
+
+        if (source.occupiedUnits() <= 0) {
+            throw new IllegalStateException(
+                    "Source plot has no units to move"
+            );
+        }
+
+        if (quantity > source.occupiedUnits()) {
+            throw new IllegalStateException(
+                    "Cannot move more units than the source plot holds"
+            );
+        }
+
+        if (destination.productId() != null
+                && !destination.productId().equals(source.productId())) {
+            throw new IllegalStateException(
+                    "Destination plot already holds a different item"
+            );
+        }
+
+        if (destination.productId() == null
+                && destination.occupiedUnits() > 0) {
+            throw new IllegalStateException(
+                    "Destination plot is occupied but has no assigned item"
+            );
+        }
+
+        if (destination.capacityUnits() > 0
+                && destination.occupiedUnits() + quantity
+                > destination.capacityUnits()) {
+            throw new IllegalStateException(
+                    "Destination plot does not have enough capacity"
+            );
+        }
+
+        boolean clearSource = quantity == source.occupiedUnits();
+        boolean assignDestination = destination.productId() == null;
+
+        // Keep the space metric consistent with the quantity moved. The source
+        // plot's area-per-unit density is used as the estimate.
+        BigDecimal movedArea = source.occupiedArea() == null
+                ? BigDecimal.ZERO
+                : source.occupiedArea();
+        if (!clearSource) {
+            movedArea = movedArea
+                    .multiply(BigDecimal.valueOf(quantity))
+                    .divide(
+                            BigDecimal.valueOf(source.occupiedUnits()),
+                            2,
+                            RoundingMode.HALF_UP
+                    );
+        }
+
+        int removed = inventoryRepository.removePlotUnits(
+                sourcePlotId,
+                quantity,
+                clearSource,
+                movedArea
+        );
+        int added = inventoryRepository.addPlotUnits(
+                destinationPlotId,
+                source.productId(),
+                quantity,
+                assignDestination,
+                movedArea
+        );
+
+        if (removed != 1 || added != 1) {
+            throw new IllegalStateException(
+                    "Could not move units between plots"
+            );
+        }
+
+        moveOrderStorage(
+                sourcePlotId,
+                destinationPlotId,
+                source.productId(),
+                quantity
+        );
+
+        return new MovePlotItemsResponse(
+                inventoryRepository.findWarehousePlotById(sourcePlotId)
+                        .orElseThrow(),
+                inventoryRepository.findWarehousePlotById(destinationPlotId)
+                        .orElseThrow()
+        );
+    }
+
+    /**
+     * Places an order's products into warehouse plots. The caller is
+     * responsible for sending quantities that cover the order; this method
+     * validates plot compatibility and capacity and records the allocation.
+     */
+    @Transactional
+    public BatchOperationResult storeOrderStorage(
+            Long orderId,
+            List<OrderStorageAllocation> allocations) {
+
+        if (allocations == null || allocations.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "At least one plot allocation is required"
+            );
+        }
+
+        if (inventoryRepository.orderStorageExists(orderId)) {
+            throw new IllegalStateException(
+                    "Order " + orderId + " is already stored in the warehouse"
+            );
+        }
+
+        Map<Long, Long> productByPlot = new LinkedHashMap<>();
+        Map<Long, Integer> quantityByPlot = new LinkedHashMap<>();
+
+        for (OrderStorageAllocation allocation : allocations) {
+            if (allocation.plotId() == null || allocation.productId() == null) {
+                throw new IllegalArgumentException(
+                        "Plot and product are required for every allocation"
+                );
+            }
+
+            validateQuantity(allocation.quantity());
+
+            productByPlot.merge(
+                    allocation.plotId(),
+                    allocation.productId(),
+                    (existing, incoming) -> {
+                        if (!existing.equals(incoming)) {
+                            throw new IllegalStateException(
+                                    "A plot can only store one item at a time"
+                            );
+                        }
+                        return existing;
+                    }
+            );
+            quantityByPlot.merge(
+                    allocation.plotId(),
+                    allocation.quantity(),
+                    Integer::sum
+            );
+        }
+
+        Map<Long, Integer> requestedByProduct = new LinkedHashMap<>();
+        for (Map.Entry<Long, Long> entry : productByPlot.entrySet()) {
+            requestedByProduct.merge(
+                    entry.getValue(),
+                    quantityByPlot.get(entry.getKey()),
+                    Integer::sum
+            );
+        }
+
+        // Plot occupancy is a breakdown of physical inventory, so the total
+        // placed in plots must never exceed the product's inventory quantity.
+        for (Map.Entry<Long, Integer> entry : requestedByProduct.entrySet()) {
+            Long productId = entry.getKey();
+            int requested = entry.getValue();
+            Inventory inventory = getInventoryByProductId(productId);
+            int plotted = inventoryRepository.totalPlotUnitsForProduct(productId);
+
+            if (plotted + requested > inventory.quantity()) {
+                throw new IllegalStateException(
+                        "Cannot store " + requested + " units of "
+                                + inventory.productName() + ": inventory has "
+                                + inventory.quantity() + " units and plots already hold "
+                                + plotted
+                );
+            }
+        }
+
+        for (Map.Entry<Long, Long> entry : productByPlot.entrySet()) {
+            Long plotId = entry.getKey();
+            Long productId = entry.getValue();
+            int quantity = quantityByPlot.get(plotId);
+
+            WarehousePlotResponse plot = inventoryRepository
+                    .findWarehousePlotById(plotId)
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Plot not found: " + plotId
+                    ));
+
+            if (plot.productId() != null
+                    && !plot.productId().equals(productId)) {
+                throw new IllegalStateException(
+                        "Plot " + plot.code()
+                                + " already holds a different item"
+                );
+            }
+
+            if (plot.productId() == null && plot.occupiedUnits() > 0) {
+                throw new IllegalStateException(
+                        "Plot " + plot.code()
+                                + " is occupied but has no assigned item"
+                );
+            }
+
+            if (plot.capacityUnits() > 0
+                    && plot.occupiedUnits() + quantity
+                    > plot.capacityUnits()) {
+                throw new IllegalStateException(
+                        "Plot " + plot.code() + " does not have enough capacity"
+                );
+            }
+
+            getInventoryByProductId(productId);
+
+            boolean assignProduct = plot.productId() == null;
+            BigDecimal area = areaForQuantity(plot, quantity);
+
+            int added = inventoryRepository.addPlotUnits(
+                    plotId,
+                    productId,
+                    quantity,
+                    assignProduct,
+                    area
+            );
+
+            if (added != 1) {
+                throw new IllegalStateException(
+                        "Could not place stock in plot " + plot.code()
+                );
+            }
+
+            inventoryRepository.saveOrderStorage(
+                    orderId,
+                    plotId,
+                    productId,
+                    quantity
+            );
+        }
+
+        return new BatchOperationResult(
+                true,
+                "Order stored in warehouse"
+        );
+    }
+
+    @Transactional
+    public BatchOperationResult releaseOrderStorage(Long orderId) {
+        releaseOrderStorageInternal(orderId);
+        return new BatchOperationResult(
+                true,
+                "Order storage released"
+        );
+    }
+
+    /**
+     * Ships an order that was stored in warehouse plots. Inventory and plot
+     * allocations are changed in one transaction.
+     */
+    @Transactional
+    public BatchOperationResult shipStoredOrder(
+            Long orderId,
+            String reference,
+            Map<Long, Integer> quantities) {
+
+        BatchOperationResult fulfillment =
+                doFulfillMaterials(reference, quantities);
+
+        if (!fulfillment.success()) {
+            throw new IllegalStateException(fulfillment.message());
+        }
+
+        releaseOrderStorageInternal(orderId);
+
+        return new BatchOperationResult(
+                true,
+                "Order shipped from warehouse"
+        );
+    }
+
+    private void releaseOrderStorageInternal(Long orderId) {
+        List<InventoryRepository.OrderStorageRow> allocations =
+                inventoryRepository.findOrderStorage(orderId);
+
+        for (InventoryRepository.OrderStorageRow allocation : allocations) {
+            int quantity = allocation.quantity();
+
+            WarehousePlotResponse plot = inventoryRepository
+                    .findWarehousePlotById(allocation.plotId())
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Stored plot no longer exists: "
+                                    + allocation.plotId()
+                    ));
+
+            if (quantity > plot.occupiedUnits()) {
+                throw new IllegalStateException(
+                        "Plot " + plot.code()
+                                + " holds fewer units than its order allocation"
+                );
+            }
+
+            boolean clearProduct = quantity == plot.occupiedUnits();
+            BigDecimal area = areaForQuantity(plot, quantity);
+
+            int removed = inventoryRepository.removePlotUnits(
+                    allocation.plotId(),
+                    quantity,
+                    clearProduct,
+                    area
+            );
+
+            if (removed != 1) {
+                throw new IllegalStateException(
+                        "Could not release stock from plot " + plot.code()
+                );
+            }
+        }
+
+        inventoryRepository.deleteOrderStorage(orderId);
+    }
+
+    /**
+     * Keeps order storage allocations aligned with a plot-to-plot move. Units
+     * are consumed from the source plot's allocations in creation order; the
+     * remainder (if any) was general stock rather than order-allocated stock.
+     */
+    private void moveOrderStorage(Long sourcePlotId,
+                                  Long destinationPlotId,
+                                  Long productId,
+                                  int quantity) {
+        int remaining = quantity;
+
+        for (InventoryRepository.OrderStorageRow allocation
+                : inventoryRepository.findPlotOrderStorage(sourcePlotId)) {
+            if (remaining <= 0) {
+                break;
+            }
+
+            if (!productId.equals(allocation.productId())) {
+                continue;
+            }
+
+            int moved = Math.min(remaining, allocation.quantity());
+
+            if (moved == allocation.quantity()) {
+                inventoryRepository.deleteOrderStorageRow(
+                        allocation.orderId(),
+                        sourcePlotId,
+                        productId
+                );
+            } else if (inventoryRepository.decrementOrderStorage(
+                    allocation.orderId(),
+                    sourcePlotId,
+                    productId,
+                    moved
+            ) != 1) {
+                throw new IllegalStateException(
+                        "Could not update order storage during plot move"
+                );
+            }
+
+            inventoryRepository.mergeOrderStorage(
+                    allocation.orderId(),
+                    destinationPlotId,
+                    productId,
+                    moved
+            );
+
+            remaining -= moved;
+        }
+    }
+
+    private BigDecimal areaForQuantity(WarehousePlotResponse plot,
+                                       int quantity) {
+        if (plot.occupiedUnits() > 0
+                && plot.occupiedArea() != null
+                && plot.occupiedArea().signum() > 0) {
+            return plot.occupiedArea()
+                    .multiply(BigDecimal.valueOf(quantity))
+                    .divide(
+                            BigDecimal.valueOf(plot.occupiedUnits()),
+                            2,
+                            RoundingMode.HALF_UP
+                    );
+        }
+
+        if (plot.capacityUnits() > 0) {
+            return plot.surfaceArea()
+                    .multiply(BigDecimal.valueOf(quantity))
+                    .divide(
+                            BigDecimal.valueOf(plot.capacityUnits()),
+                            2,
+                            RoundingMode.HALF_UP
+                    );
+        }
+
+        return BigDecimal.ZERO;
+    }
+
+    private ValidatedPlot validatePlotRequest(
+            CreateWarehousePlotRequest request) {
 
         String plotType = request.plotType() == null
                 ? "RACK"
@@ -102,8 +663,7 @@ public class InventoryService {
                     ));
         }
 
-        return inventoryRepository.saveWarehousePlot(
-                warehouseId,
+        return new ValidatedPlot(
                 request.code().trim().toUpperCase(),
                 request.name().trim(),
                 plotType,
@@ -113,6 +673,18 @@ public class InventoryService {
                 capacityUnits,
                 occupiedUnits
         );
+    }
+
+    private record ValidatedPlot(
+            String code,
+            String name,
+            String plotType,
+            BigDecimal surfaceArea,
+            BigDecimal occupiedArea,
+            Long productId,
+            int capacityUnits,
+            int occupiedUnits
+    ) {
     }
 
     @Transactional(readOnly = true)
@@ -316,6 +888,13 @@ public class InventoryService {
     @Transactional
     public BatchOperationResult fulfillMaterials(String reference,
                                                  Map<Long, Integer> quantities) {
+        return doFulfillMaterials(reference, quantities);
+    }
+
+    private BatchOperationResult doFulfillMaterials(
+            String reference,
+            Map<Long, Integer> quantities) {
+
         Map<Long, Integer> requested = normalizeQuantities(quantities);
 
         List<MaterialReservation> existing =

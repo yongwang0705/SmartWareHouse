@@ -1,8 +1,11 @@
 package com.ikwhere.smartwarehouse_order_service.grpc;
 
+import com.ikwhere.smartwarehouse.grpc.GetOrderRequirementsRequest;
+import com.ikwhere.smartwarehouse.grpc.GetOrderRequirementsResponse;
 import com.ikwhere.smartwarehouse.grpc.GetPendingProductionOrdersRequest;
 import com.ikwhere.smartwarehouse.grpc.GetPendingProductionOrdersResponse;
 import com.ikwhere.smartwarehouse.grpc.OrderItemDto;
+import com.ikwhere.smartwarehouse.grpc.OrderRequirementDto;
 import com.ikwhere.smartwarehouse.grpc.OrderServiceGrpc;
 import com.ikwhere.smartwarehouse.grpc.ProductionOrderDto;
 import com.ikwhere.smartwarehouse.grpc.UpdateProductionStatusRequest;
@@ -86,6 +89,46 @@ public class OrderGrpcService extends OrderServiceGrpc.OrderServiceImplBase {
 
         } catch (Exception e) {
             responseObserver.onError(io.grpc.Status.INVALID_ARGUMENT
+                    .withDescription(e.getMessage())
+                    .asRuntimeException());
+        }
+    }
+
+    @Override
+    public void getOrderRequirements(
+            GetOrderRequirementsRequest request,
+            StreamObserver<GetOrderRequirementsResponse> responseObserver) {
+
+        try {
+            if (orderRepository.findById(request.getOrderId()).isEmpty()) {
+                responseObserver.onNext(
+                        GetOrderRequirementsResponse.newBuilder()
+                                .setFound(false)
+                                .build()
+                );
+                responseObserver.onCompleted();
+                return;
+            }
+
+            GetOrderRequirementsResponse.Builder response =
+                    GetOrderRequirementsResponse.newBuilder().setFound(true);
+
+            for (OrderItem item
+                    : orderItemRepository.findByOrderId(request.getOrderId())) {
+                response.addItems(OrderRequirementDto.newBuilder()
+                        .setProductId(item.productId())
+                        .setProductName(item.productName() == null
+                                ? ""
+                                : item.productName())
+                        .setQuantity(item.quantity())
+                        .build());
+            }
+
+            responseObserver.onNext(response.build());
+            responseObserver.onCompleted();
+
+        } catch (Exception e) {
+            responseObserver.onError(io.grpc.Status.INTERNAL
                     .withDescription(e.getMessage())
                     .asRuntimeException());
         }

@@ -25,6 +25,51 @@ service InventoryService {
 
   rpc FulfillMaterials (FulfillMaterialsRequest)
       returns (FulfillMaterialsResponse);
+
+  rpc StoreOrderStorage (StoreOrderStorageRequest)
+      returns (StoreOrderStorageResponse);
+
+  rpc ShipStoredOrder (ShipStoredOrderRequest)
+      returns (ShipStoredOrderResponse);
+
+  rpc ReleaseOrderStorage (ReleaseOrderStorageRequest)
+      returns (ReleaseOrderStorageResponse);
+}
+
+message OrderStorageAllocation {
+  int64 plot_id = 1;
+  int64 product_id = 2;
+  int32 quantity = 3;
+}
+
+message StoreOrderStorageRequest {
+  int64 order_id = 1;
+  repeated OrderStorageAllocation allocations = 2;
+}
+
+message StoreOrderStorageResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message ShipStoredOrderRequest {
+  int64 order_id = 1;
+  string reservation_reference = 2;
+  repeated MaterialReservationItem items = 3;
+}
+
+message ShipStoredOrderResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message ReleaseOrderStorageRequest {
+  int64 order_id = 1;
+}
+
+message ReleaseOrderStorageResponse {
+  bool success = 1;
+  string message = 2;
 }
 
 message FulfillMaterialsRequest {

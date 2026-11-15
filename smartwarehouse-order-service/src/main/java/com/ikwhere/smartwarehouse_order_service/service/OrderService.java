@@ -6,9 +6,11 @@ import com.ikwhere.smartwarehouse.grpc.ReleaseMaterialsResponse;
 import com.ikwhere.smartwarehouse.grpc.ReserveMaterialsResponse;
 import com.ikwhere.smartwarehouse_order_service.client.InventoryGrpcClient;
 import com.ikwhere.smartwarehouse_order_service.dto.CreateOrderRequest;
+import com.ikwhere.smartwarehouse_order_service.dto.DeliverySelectionRequest;
 import com.ikwhere.smartwarehouse_order_service.dto.OrderItemRequest;
 import com.ikwhere.smartwarehouse_order_service.dto.OrderItemResponse;
 import com.ikwhere.smartwarehouse_order_service.dto.OrderResponse;
+import com.ikwhere.smartwarehouse_order_service.dto.StoreOrderRequest;
 import com.ikwhere.smartwarehouse_order_service.model.Order;
 import com.ikwhere.smartwarehouse_order_service.model.OrderItem;
 import com.ikwhere.smartwarehouse_order_service.repository.OrderItemRepository;
@@ -24,7 +26,9 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 @Service
@@ -129,7 +133,15 @@ public class OrderService {
                 itemResponses,
                 order.dueDate(),
                 order.priority(),
-                order.productionStatus()
+                order.productionStatus(),
+                order.deliveryMode(),
+                order.deliveryCarrier(),
+                order.deliveryDestination(),
+                order.deliveryDistanceKm(),
+                order.deliveryTransitDays(),
+                order.deliveryPrice(),
+                order.deliveryContainer(),
+                order.deliveredAt()
         );
     }
 
@@ -205,8 +217,8 @@ public class OrderService {
     }
 
     /**
-     * Final user confirmation. Inventory is consumed (reserved stock for READY
-     * orders, or available stock for orders that were produced to order).
+     * Final user confirmation of production/fulfilment readiness. Stock is
+     * not consumed here: the order becomes COMPLETED and is shipped later.
      */
     @Transactional
     public OrderResponse completeOrder(Long orderId) {
@@ -230,30 +242,172 @@ public class OrderService {
             );
         }
 
-        List<OrderItem> items =
-                orderItemRepository.findByOrderId(orderId);
-        Map<Long, Integer> quantities = aggregateItemQuantities(items);
-
-        if (!quantities.isEmpty()) {
-            FulfillMaterialsResponse fulfillment =
-                    inventoryGrpcClient.fulfillMaterials(
-                            RESERVATION_PREFIX + orderId,
-                            quantities
-                    );
-
-            if (!fulfillment.getSuccess()) {
-                throw new IllegalStateException(
-                        "Could not fulfil inventory for order " + orderId
-                                + ": " + fulfillment.getMessage()
-                );
-            }
-        }
-
         int updated = orderRepository.completeOrder(orderId);
 
         if (updated != 1) {
             throw new IllegalStateException(
                     "Could not complete order: " + orderId
+            );
+        }
+
+        return buildOrderResponse(requireOrder(orderId));
+    }
+
+    /**
+     * Stores a completed order's products in warehouse plots. The allocations
+     * must cover every ordered line exactly; plot capacity and compatibility
+     * are validated by the inventory service.
+     */
+    @Transactional
+    public OrderResponse storeOrder(Long orderId,
+                                    StoreOrderRequest request) {
+
+        Order order = requireOrder(orderId);
+
+        if (!"COMPLETED".equals(order.status())) {
+            throw new IllegalStateException(
+                    "Order " + orderId + " cannot be stored from status "
+                            + order.status()
+            );
+        }
+
+        if (request == null
+                || request.allocations() == null
+                || request.allocations().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "At least one plot allocation is required"
+            );
+        }
+
+        Map<Long, Integer> required = aggregateItemQuantities(
+                orderItemRepository.findByOrderId(orderId)
+        );
+        Map<Long, Integer> allocated = new TreeMap<>();
+
+        for (StoreOrderRequest.StorageAllocation allocation
+                : request.allocations()) {
+            if (allocation == null) {
+                throw new IllegalArgumentException(
+                        "Plot allocations cannot contain null rows"
+                );
+            }
+
+            allocated.merge(
+                    allocation.productId(),
+                    allocation.quantity(),
+                    Integer::sum
+            );
+        }
+
+        if (!required.equals(allocated)) {
+            throw new IllegalStateException(
+                    "Allocations must cover the order exactly: required "
+                            + required + ", allocated " + allocated
+            );
+        }
+
+        var storage = inventoryGrpcClient.storeOrderStorage(
+                orderId,
+                request.allocations()
+        );
+
+        if (!storage.getSuccess()) {
+            throw new IllegalStateException(
+                    "Could not store order " + orderId
+                            + " in the warehouse: " + storage.getMessage()
+            );
+        }
+
+        int updated = orderRepository.storeOrder(orderId);
+
+        if (updated != 1) {
+            try {
+                inventoryGrpcClient.releaseOrderStorage(orderId);
+            } catch (RuntimeException e) {
+                log.error(
+                        "Could not roll back warehouse storage for order {}",
+                        orderId,
+                        e
+                );
+            }
+
+            throw new IllegalStateException(
+                    "Could not mark order " + orderId + " as in warehouse"
+            );
+        }
+
+        return buildOrderResponse(requireOrder(orderId));
+    }
+
+    /**
+     * Ships an order with the delivery plan chosen by the user. Normal orders
+     * ship from warehouse storage (IN_WAREHOUSE); emergent orders may ship
+     * directly from production (COMPLETED).
+     */
+    @Transactional
+    public OrderResponse shipOrder(Long orderId,
+                                   DeliverySelectionRequest delivery) {
+
+        Order order = requireOrder(orderId);
+
+        if (!"COMPLETED".equals(order.status())
+                && !"IN_WAREHOUSE".equals(order.status())) {
+            throw new IllegalStateException(
+                    "Order " + orderId + " cannot be shipped from status "
+                            + order.status()
+            );
+        }
+
+        if (delivery == null) {
+            throw new IllegalArgumentException(
+                    "A delivery option is required to ship order " + orderId
+            );
+        }
+
+        validateDelivery(delivery);
+
+        boolean fromWarehouse = "IN_WAREHOUSE".equals(order.status());
+
+        List<OrderItem> items =
+                orderItemRepository.findByOrderId(orderId);
+        Map<Long, Integer> quantities = aggregateItemQuantities(items);
+
+        if (!quantities.isEmpty()) {
+            if (fromWarehouse) {
+                var shipping = inventoryGrpcClient.shipStoredOrder(
+                        orderId,
+                        RESERVATION_PREFIX + orderId,
+                        quantities
+                );
+
+                if (!shipping.getSuccess()) {
+                    throw new IllegalStateException(
+                            "Could not ship order " + orderId
+                                    + " from the warehouse: "
+                                    + shipping.getMessage()
+                    );
+                }
+            } else {
+                FulfillMaterialsResponse fulfillment =
+                        inventoryGrpcClient.fulfillMaterials(
+                                RESERVATION_PREFIX + orderId,
+                                quantities
+                        );
+
+                if (!fulfillment.getSuccess()) {
+                    throw new IllegalStateException(
+                            "Could not fulfil inventory for order " + orderId
+                                    + ": " + fulfillment.getMessage()
+                    );
+                }
+            }
+        }
+
+        int updated = orderRepository.shipOrder(orderId, delivery);
+
+        if (updated != 1) {
+            throw new IllegalStateException(
+                    "Could not ship order: " + orderId
             );
         }
 
@@ -274,6 +428,19 @@ public class OrderService {
         if ("COMPLETED".equals(order.status())) {
             throw new IllegalStateException(
                     "Order " + orderId + " is already completed"
+            );
+        }
+
+        if ("SHIPPED".equals(order.status())) {
+            throw new IllegalStateException(
+                    "Order " + orderId + " is already shipped"
+            );
+        }
+
+        if ("IN_WAREHOUSE".equals(order.status())) {
+            throw new IllegalStateException(
+                    "Order " + orderId
+                            + " is stored in the warehouse and must be shipped"
             );
         }
 
@@ -363,7 +530,15 @@ public class OrderService {
                 items,
                 order.dueDate(),
                 order.priority(),
-                order.productionStatus()
+                order.productionStatus(),
+                order.deliveryMode(),
+                order.deliveryCarrier(),
+                order.deliveryDestination(),
+                order.deliveryDistanceKm(),
+                order.deliveryTransitDays(),
+                order.deliveryPrice(),
+                order.deliveryContainer(),
+                order.deliveredAt()
         );
     }
 
@@ -426,6 +601,20 @@ public class OrderService {
         }
 
         return quantities;
+    }
+
+    private void validateDelivery(DeliverySelectionRequest delivery) {
+        if (delivery == null) {
+            return;
+        }
+
+        String mode = delivery.mode().trim().toUpperCase(Locale.ROOT);
+
+        if (!Set.of("SEA", "AIR", "FREIGHT").contains(mode)) {
+            throw new IllegalArgumentException(
+                    "Unsupported delivery mode: " + delivery.mode()
+            );
+        }
     }
 
     private boolean isUnknownReservation(String message) {

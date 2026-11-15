@@ -1,14 +1,17 @@
 package com.ikwhere.smartwarehouse_order_service.repository;
 
+import com.ikwhere.smartwarehouse_order_service.dto.DeliverySelectionRequest;
 import com.ikwhere.smartwarehouse_order_service.model.Order;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
+import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 @Repository
@@ -29,8 +32,20 @@ public class OrderRepository {
                     rs.getTimestamp("created_at").toLocalDateTime(),
                     rs.getTimestamp("due_date").toLocalDateTime(),
                     rs.getString("priority"),
-                    rs.getString("production_status")
+                    rs.getString("production_status"),
+                    rs.getString("delivery_mode"),
+                    rs.getString("delivery_carrier"),
+                    rs.getString("delivery_destination"),
+                    rs.getBigDecimal("delivery_distance_km"),
+                    rs.getObject("delivery_transit_days", Integer.class),
+                    rs.getBigDecimal("delivery_price"),
+                    rs.getString("delivery_container"),
+                    toLocalDateTime(rs.getTimestamp("delivered_at"))
             );
+
+    private static LocalDateTime toLocalDateTime(Timestamp timestamp) {
+        return timestamp == null ? null : timestamp.toLocalDateTime();
+    }
 
 
     public Order save(Long customerId, BigDecimal totalAmount,
@@ -133,6 +148,49 @@ public class OrderRepository {
             """;
 
         return jdbcTemplate.update(sql, orderId);
+    }
+
+    public int storeOrder(Long orderId) {
+
+        String sql = """
+            UPDATE orders
+            SET status = 'IN_WAREHOUSE'
+            WHERE id = ?
+              AND status = 'COMPLETED'
+            """;
+
+        return jdbcTemplate.update(sql, orderId);
+    }
+
+    public int shipOrder(Long orderId,
+                         DeliverySelectionRequest delivery) {
+
+        String sql = """
+            UPDATE orders
+            SET status = 'SHIPPED',
+                delivery_mode = ?,
+                delivery_carrier = ?,
+                delivery_destination = ?,
+                delivery_distance_km = ?,
+                delivery_transit_days = ?,
+                delivery_price = ?,
+                delivery_container = ?,
+                delivered_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+              AND status IN ('COMPLETED', 'IN_WAREHOUSE')
+            """;
+
+        return jdbcTemplate.update(
+                sql,
+                delivery.mode().trim().toUpperCase(Locale.ROOT),
+                delivery.carrier(),
+                delivery.destination(),
+                delivery.distanceKm(),
+                delivery.transitDays(),
+                delivery.price(),
+                delivery.container(),
+                orderId
+        );
     }
 
     public int updateProductionStatus(Long orderId, String productionStatus) {

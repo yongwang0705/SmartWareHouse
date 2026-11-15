@@ -1,5 +1,9 @@
 package com.ikwhere.smartwarehouse_inventory.controller;
 
+import com.ikwhere.smartwarehouse_inventory.dto.CreateWarehousePlotRequest;
+import com.ikwhere.smartwarehouse_inventory.dto.MovePlotItemsRequest;
+import com.ikwhere.smartwarehouse_inventory.dto.MovePlotItemsResponse;
+import com.ikwhere.smartwarehouse_inventory.dto.WarehousePlotResponse;
 import com.ikwhere.smartwarehouse_inventory.model.Inventory;
 import com.ikwhere.smartwarehouse_inventory.service.InventoryService;
 import jakarta.validation.Valid;
@@ -38,14 +42,48 @@ public class InventoryController {
     }
 
     @PostMapping("/warehouses/{warehouseId}/plots")
-    public ResponseEntity<com.ikwhere.smartwarehouse_inventory.dto.WarehousePlotResponse>
-    createWarehousePlot(
+    public ResponseEntity<WarehousePlotResponse> createWarehousePlot(
             @PathVariable Long warehouseId,
-            @Valid @RequestBody
-            com.ikwhere.smartwarehouse_inventory.dto.CreateWarehousePlotRequest request) {
+            @Valid @RequestBody CreateWarehousePlotRequest request) {
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(inventoryService.createWarehousePlot(warehouseId, request));
+    }
+
+    @PutMapping("/warehouses/{warehouseId}/plots/{plotId}")
+    public ResponseEntity<WarehousePlotResponse> updateWarehousePlot(
+            @PathVariable Long warehouseId,
+            @PathVariable Long plotId,
+            @Valid @RequestBody CreateWarehousePlotRequest request) {
+
+        return ResponseEntity.ok(
+                inventoryService.updateWarehousePlot(
+                        warehouseId, plotId, request
+                )
+        );
+    }
+
+    @DeleteMapping("/warehouses/{warehouseId}/plots/{plotId}")
+    public ResponseEntity<Void> deleteWarehousePlot(
+            @PathVariable Long warehouseId,
+            @PathVariable Long plotId) {
+
+        inventoryService.deleteWarehousePlot(warehouseId, plotId);
+
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/warehouses/{warehouseId}/plots/{plotId}/move")
+    public ResponseEntity<MovePlotItemsResponse> moveWarehousePlotItems(
+            @PathVariable Long warehouseId,
+            @PathVariable Long plotId,
+            @Valid @RequestBody MovePlotItemsRequest request) {
+
+        return ResponseEntity.ok(
+                inventoryService.moveWarehousePlotItems(
+                        warehouseId, plotId, request
+                )
+        );
     }
 
     @GetMapping("/{productId}")

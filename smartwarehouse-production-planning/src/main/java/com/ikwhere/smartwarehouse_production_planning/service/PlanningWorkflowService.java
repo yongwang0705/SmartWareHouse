@@ -483,6 +483,58 @@ public class PlanningWorkflowService {
         return plan;
     }
 
+    /**
+     * An order may be split across several plans, so production is complete
+     * once the quantity of COMPLETED tasks covers every ordered line.
+     * Cancelled tasks and tasks from other partial plans do not block this.
+     */
+    private boolean isOrderProducedInFull(Long orderId,
+                                          List<ProductionTask> tasks) {
+        Map<Long, Integer> completed = new HashMap<>();
+        for (ProductionTask task : tasks) {
+            if ("COMPLETED".equals(task.status())) {
+                completed.merge(
+                        task.productId(),
+                        task.quantity(),
+                        Integer::sum
+                );
+            }
+        }
+
+        try {
+            var requirements =
+                    orderGrpcClient.getOrderRequirements(orderId);
+
+            if (requirements.getFound()
+                    && requirements.getItemsCount() > 0) {
+                for (var item : requirements.getItemsList()) {
+                    if (completed.getOrDefault(item.getProductId(), 0)
+                            < item.getQuantity()) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+        } catch (RuntimeException e) {
+            log.warn(
+                    "Could not read requirements for order {}; "
+                            + "falling back to task status",
+                    orderId,
+                    e
+            );
+        }
+
+        // Compatibility fallback for an older order service: ignore
+        // cancelled tasks when checking whether all remaining work is done.
+        List<ProductionTask> active = tasks.stream()
+                .filter(task -> !"CANCELLED".equals(task.status()))
+                .toList();
+
+        return !active.isEmpty()
+                && active.stream()
+                .allMatch(task -> "COMPLETED".equals(task.status()));
+    }
+
     private void validateTaskTimes(LocalDateTime start,
                                     LocalDateTime end) {
         if (start == null || end == null || !end.isAfter(start)) {
@@ -960,10 +1012,7 @@ public class PlanningWorkflowService {
             List<ProductionTask> orderTasks =
                     taskRepository.findByOrderId(task.orderId());
 
-            boolean orderComplete = orderTasks.stream()
-                    .allMatch(item -> "COMPLETED".equals(item.status()));
-
-            if (orderComplete) {
+            if (isOrderProducedInFull(task.orderId(), orderTasks)) {
                 try {
                     orderGrpcClient.updateProductionStatus(
                             task.orderId(),
