@@ -7,8 +7,10 @@ import {
 import Sidebar, { type Page } from './components/Sidebar';
 import Topbar from './components/Topbar';
 import OrderModal from './components/OrderModal';
+import DeliveryPlanner, { DeliveryReceipt } from './components/DeliveryPlanner';
+import { deadlineDays } from './utils/delivery';
 import { api } from './services/api';
-import type { InventoryItem, Order } from './types';
+import type { DeliveryQuote, InventoryItem, Order } from './types';
 import DashboardPage from './pages/DashboardPage';
 import ProductionPage from './pages/ProductionPage';
 import BOMPage from './pages/BOMPage';
@@ -53,6 +55,7 @@ export default function App() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [selectedDelivery, setSelectedDelivery] = useState<DeliveryQuote | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [notice, setNotice] = useState('');
 
@@ -109,11 +112,32 @@ export default function App() {
   };
 
   const completeOrder = async (order: Order): Promise<boolean> => {
-    if (!window.confirm(`Complete order #${order.id}? Fulfilled inventory will be deducted.`)) return false;
+    if (!selectedDelivery) {
+      setNotice('Choose a delivery option before completing the order.');
+      return false;
+    }
+
+    const lateBy = Math.max(0, selectedDelivery.transitDays - deadlineDays(order));
+    const lateWarning = !selectedDelivery.meetsDeadline
+      ? ` This option misses the deadline by ${lateBy} day${lateBy === 1 ? '' : 's'}.`
+      : '';
+    if (!window.confirm(
+      `Complete order #${order.id} with ${selectedDelivery.label} via ${selectedDelivery.carrier} for ${money(selectedDelivery.price)}?${lateWarning} Fulfilled inventory will be deducted.`,
+    )) return false;
+
     try {
-      const updated = await api.completeOrder(order.id);
+      const updated = await api.completeOrder(order.id, {
+        mode: selectedDelivery.mode,
+        carrier: selectedDelivery.carrier,
+        destination: selectedDelivery.destination,
+        distanceKm: selectedDelivery.distanceKm,
+        transitDays: selectedDelivery.transitDays,
+        price: selectedDelivery.price,
+        container: selectedDelivery.container,
+      });
       setSelectedOrder(updated);
-      setNotice(`Order #${order.id} completed.`);
+      setSelectedDelivery(null);
+      setNotice(`Order #${order.id} completed with ${selectedDelivery.label} via ${selectedDelivery.carrier}.`);
       await loadData(true);
       return true;
     } catch (err) {
@@ -127,7 +151,10 @@ export default function App() {
     try {
       await api.cancelOrder(order.id);
       setNotice(`Order #${order.id} cancelled. Reserved inventory was released.`);
-      if (selectedOrder?.id === order.id) setSelectedOrder(null);
+      if (selectedOrder?.id === order.id) {
+        setSelectedOrder(null);
+        setSelectedDelivery(null);
+      }
       await loadData(true);
     } catch (err) {
       setNotice(err instanceof Error ? err.message : 'Unable to cancel order.');
@@ -135,8 +162,14 @@ export default function App() {
   };
 
   const openOrder = async (order: Order) => {
+    setSelectedDelivery(null);
     try { setSelectedOrder(await api.getOrder(order.id)); }
     catch { setSelectedOrder(order); }
+  };
+
+  const closeOrder = () => {
+    setSelectedOrder(null);
+    setSelectedDelivery(null);
   };
 
   const renderOrders = (compact = false) => <div className={`table-card ${compact ? 'compact-table' : ''}`}>
@@ -163,13 +196,15 @@ export default function App() {
       orders={orders}
       inventory={inventory}
       onOpenOrder={openOrder}
-      onCompleteOrder={completeOrder}
     />
   ) : page === 'orders' ? <>
     <div className="page-toolbar"><div><h2>Order pipeline</h2><p>Review customer orders and manage their lifecycle.</p></div><button className="button button-primary" onClick={() => setShowOrderModal(true)}><FontAwesomeIcon icon={faPlus} /> Create order</button></div>
     <div className="filter-bar"><div className="filter-tabs">{['ALL', 'CREATED', 'CONFIRMED', 'COMPLETED', 'CANCELLED'].map((status) => <button key={status} className={statusFilter === status ? 'filter-active' : ''} onClick={() => setStatusFilter(status)}>{status === 'ALL' ? 'All orders' : status.charAt(0) + status.slice(1).toLowerCase()}</button>)}</div><span className="result-count">{filteredOrders.length} results</span></div>
     {renderOrders(false)}
   </> : page === 'inventory' ? <InventoryPage inventory={inventory} onRefreshStock={() => void loadData(true)} /> : page === 'production' ? <ProductionPage /> : page === 'bom' ? <BOMPage /> : page === 'warehouses' ? <WarehousesPage /> : <div className="coming-soon-card"><div className="coming-soon-icon"><FontAwesomeIcon icon={faTruckFast} /></div><span className="eyebrow">COMING NEXT</span><h2>Supplier management</h2><p>This section is part of the planned SmartWarehouse roadmap. The current backend exposes order and inventory operations; this module can be connected when its service is ready.</p><button className="button button-secondary" onClick={() => setPage('dashboard')}>Back to dashboard</button></div>;
+
+  const selectedCanComplete = selectedOrder?.status === 'CONFIRMED'
+    && ['READY', 'PRODUCTION_COMPLETED'].includes(selectedOrder.productionStatus || '');
 
   return <div className="app-shell">
     <Sidebar page={page} onNavigate={setPage} open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
@@ -182,7 +217,39 @@ export default function App() {
       <footer className="app-footer"><span>© 2026 SmartWarehouse</span><span><i className="footer-dot" /> API Gateway <strong>Connected when data loads</strong></span><span>Built for smarter operations</span></footer>
     </main>
     {showOrderModal && <OrderModal inventory={inventory} onClose={() => setShowOrderModal(false)} onSubmit={createOrder} />}
-    {selectedOrder && <div className="modal-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setSelectedOrder(null); }}><section className="modal-card order-detail-modal" role="dialog" aria-modal="true"><div className="modal-header"><div><div className="eyebrow">ORDER DETAILS</div><h2>Order #ORD-{selectedOrder.id}</h2><p>Created {dateTime(selectedOrder.createdAt)}</p></div><button className="icon-button" onClick={() => setSelectedOrder(null)} aria-label="Close">×</button></div><div className="detail-summary"><div><small>CUSTOMER</small><strong>#{selectedOrder.customerId}</strong></div><div><small>DUE DATE</small><strong>{selectedOrder.dueDate ? dateTime(selectedOrder.dueDate) : '—'}</strong></div><div><small>TOTAL</small><strong>{money(selectedOrder.totalAmount)}</strong></div><div><small>STATUS</small><span className={`status-pill status-${statusClass(selectedOrder.status)}`}><i />{selectedOrder.status}</span></div><div><small>PRODUCTION</small><strong>{productionLabel(selectedOrder.productionStatus)}</strong></div></div><h3 className="detail-section-title">Order items</h3><div className="detail-items">{selectedOrder.items?.map((item, index) => <div className="detail-item" key={item.id ?? `${item.productId}-${index}`}><div><strong>{item.productName}</strong><small>SKU #{item.productId} · Qty {item.quantity}</small></div><strong>{money(item.subtotal ?? item.unitPrice * item.quantity)}</strong></div>)}</div><div className="detail-total"><span>Order total</span><strong>{money(selectedOrder.totalAmount)}</strong></div><div className="modal-footer">{selectedOrder.status === 'CREATED' && <button className="button button-primary" onClick={() => void confirmOrder(selectedOrder)}>Confirm order</button>}{selectedOrder.status === 'CONFIRMED' && ['READY', 'PRODUCTION_COMPLETED'].includes(selectedOrder.productionStatus || '') && <button className="button button-primary" onClick={() => void completeOrder(selectedOrder)}>Complete order</button>}{['CREATED', 'CONFIRMED'].includes(selectedOrder.status || '') && !['PLANNED', 'IN_PRODUCTION', 'PRODUCTION_COMPLETED'].includes(selectedOrder.productionStatus || '') && <button className="button button-danger" onClick={() => void cancelOrder(selectedOrder)}>Cancel order</button>}<button className="button button-ghost" onClick={() => setSelectedOrder(null)}>Close</button></div></section></div>}
+    {selectedOrder && <div className="modal-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) closeOrder(); }}>
+      <section className="modal-card order-detail-modal" role="dialog" aria-modal="true" aria-labelledby="order-detail-title">
+        <div className="modal-header">
+          <div><div className="eyebrow">ORDER DETAILS</div><h2 id="order-detail-title">Order #ORD-{selectedOrder.id}</h2><p>Created {dateTime(selectedOrder.createdAt)}</p></div>
+          <button className="icon-button" onClick={closeOrder} aria-label="Close">×</button>
+        </div>
+        <div className="detail-summary">
+          <div><small>CUSTOMER</small><strong>#{selectedOrder.customerId}</strong></div>
+          <div><small>DUE DATE</small><strong>{selectedOrder.dueDate ? dateTime(selectedOrder.dueDate) : '—'}</strong></div>
+          <div><small>TOTAL</small><strong>{money(selectedOrder.totalAmount)}</strong></div>
+          <div><small>STATUS</small><span className={`status-pill status-${statusClass(selectedOrder.status)}`}><i />{selectedOrder.status}</span></div>
+          <div><small>PRODUCTION</small><strong>{productionLabel(selectedOrder.productionStatus)}</strong></div>
+        </div>
+        <h3 className="detail-section-title">Order items</h3>
+        <div className="detail-items">
+          {selectedOrder.items?.map((item, index) => <div className="detail-item" key={item.id ?? `${item.productId}-${index}`}>
+            <div><strong>{item.productName}</strong><small>SKU #{item.productId} · Qty {item.quantity}</small></div>
+            <strong>{money(item.subtotal ?? item.unitPrice * item.quantity)}</strong>
+          </div>)}
+        </div>
+        <div className="detail-total"><span>Order total</span><strong>{money(selectedOrder.totalAmount)}</strong></div>
+        {selectedCanComplete && <DeliveryPlanner key={selectedOrder.id} order={selectedOrder} onChange={setSelectedDelivery} />}
+        {selectedOrder.deliveryMode && <DeliveryReceipt order={selectedOrder} />}
+        <div className="modal-footer">
+          {selectedOrder.status === 'CREATED' && <button className="button button-primary" onClick={() => void confirmOrder(selectedOrder)}>Confirm order</button>}
+          {selectedCanComplete && <button className="button button-primary" disabled={!selectedDelivery} onClick={() => void completeOrder(selectedOrder)}>
+            {selectedDelivery ? `Complete order · ${money(selectedDelivery.price)} delivery` : 'Choose a delivery option'}
+          </button>}
+          {['CREATED', 'CONFIRMED'].includes(selectedOrder.status || '') && !['PLANNED', 'IN_PRODUCTION', 'PRODUCTION_COMPLETED'].includes(selectedOrder.productionStatus || '') && <button className="button button-danger" onClick={() => void cancelOrder(selectedOrder)}>Cancel order</button>}
+          <button className="button button-ghost" onClick={closeOrder}>Close</button>
+        </div>
+      </section>
+    </div>}
     {notice && <div className={`toast ${notice.toLowerCase().includes('unable') || notice.toLowerCase().includes('failed') || notice.toLowerCase().includes('insufficient') ? 'toast-error' : ''}`}><FontAwesomeIcon icon={faCheck} />{notice}</div>}
   </div>;
 }

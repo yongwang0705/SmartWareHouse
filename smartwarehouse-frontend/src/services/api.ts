@@ -1,11 +1,11 @@
 import type {
   BOMItem, CreateOrderRequest, CreateProductionLineRequest,
-  CreateWarehousePlotRequest, Employee, EmployeeShift, EmployeeSkill,
-  EmployeeUnavailability, GeneratePlanRequest, InventoryItem, KanbanBin,
-  Order, PlanActionResponse, PlanDetails, PlanSummary, PlanTaskRequest,
-  ProductionBom, ProductionLine, ProductionRouting, ProductionTask,
-  ReplenishPlanRequest, RoutingOperation, Warehouse, WarehousePlot, WorkCenter,
-  WorkingCalendarEntry,
+  CreateWarehousePlotRequest, DeliverySelection, Employee, EmployeeShift,
+  EmployeeSkill, EmployeeUnavailability, GeneratePlanRequest, InventoryItem,
+  KanbanBin, Order, PlanActionResponse, PlanDetails, PlanSummary,
+  PlanTaskRequest, ProductionBom, ProductionLine, ProductionRouting,
+  ProductionTask, ReplenishPlanRequest, RoutingOperation, Warehouse,
+  WarehousePlot, WorkCenter, WorkingCalendarEntry,
 } from '../types';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
@@ -48,8 +48,8 @@ export const api = {
     post<Order>('/api/orders', payload),
   confirmOrder: (id: number) =>
     post<Order>(`/api/orders/${id}/confirm`),
-  completeOrder: (id: number) =>
-    post<Order>(`/api/orders/${id}/complete`),
+  completeOrder: (id: number, delivery?: DeliverySelection) =>
+    post<Order>(`/api/orders/${id}/complete`, delivery),
   cancelOrder: (id: number) =>
     request<{ message?: string }>(`/api/orders/${id}`, { method: 'DELETE' }),
 

@@ -41,7 +41,6 @@ interface Props {
   orders: Order[];
   inventory: InventoryItem[];
   onOpenOrder: (order: Order) => void;
-  onCompleteOrder: (order: Order) => Promise<boolean>;
 }
 
 interface Progress {
@@ -69,7 +68,7 @@ const ACTIVE_PLAN_STATUSES = new Set([
 ]);
 
 export default function DashboardPage({
-  orders, inventory, onOpenOrder, onCompleteOrder,
+  orders, inventory, onOpenOrder,
 }: Props) {
   const [tasks, setTasks] = useState<ProductionTask[]>([]);
   const [plans, setPlans] = useState<PlanSummary[]>([]);
@@ -77,7 +76,6 @@ export default function DashboardPage({
   const [operations, setOperations] = useState<RoutingOperation[]>([]);
   const [productionLoading, setProductionLoading] = useState(true);
   const [productionError, setProductionError] = useState('');
-  const [busyOrderId, setBusyOrderId] = useState<number | null>(null);
 
   const loadProduction = useCallback(async () => {
     setProductionLoading(true);
@@ -274,16 +272,6 @@ export default function DashboardPage({
     return names.length > 0 ? [...new Set(names)].join(', ') : '—';
   };
 
-  const finishOrder = async (order: Order) => {
-    setBusyOrderId(order.id);
-    const completed = await onCompleteOrder(order);
-    setBusyOrderId(null);
-
-    if (completed) {
-      await loadProduction();
-    }
-  };
-
   return (
     <div>
       <div className="welcome-row">
@@ -394,10 +382,9 @@ export default function DashboardPage({
                         {finishable && (
                           <button
                             className="mini-button mini-button-success"
-                            disabled={busyOrderId === order.id}
-                            onClick={() => void finishOrder(order)}
+                            onClick={() => onOpenOrder(order)}
                           >
-                            {busyOrderId === order.id ? 'Finishing...' : 'Mark finished'}
+                            Arrange delivery
                           </button>
                         )}
                       </div>

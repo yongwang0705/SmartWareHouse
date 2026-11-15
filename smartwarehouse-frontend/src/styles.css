@@ -509,3 +509,70 @@
 .generate-order-row small{display:block;font-size:7.5px;color:#98a2b1;margin-top:2px}
 .generate-order-items{display:flex;flex-wrap:wrap;gap:4px 6px;font-size:8px;color:#526074}
 .generate-order-items span{background:#fff;border:1px solid #eef1f5;border-radius:4px;padding:2px 5px;white-space:nowrap}
+
+/* ---------------------------------------------------------------------
+   Delivery planning (order completion)
+   --------------------------------------------------------------------- */
+
+.order-detail-modal{width:min(980px,100%)}
+.delivery-planner{margin-top:20px;padding:16px;border:1px solid #e3ebf7;border-radius:10px;background:#f8fbff}
+.delivery-planner .form-section-title{margin-top:0}
+.delivery-origin{display:flex;align-items:center;gap:5px;font-weight:700;letter-spacing:0;text-transform:none;color:#7c8797}
+.delivery-controls{display:grid;grid-template-columns:minmax(220px,1fr) 1.8fr;gap:14px;align-items:end}
+.delivery-destination{min-width:0}
+.delivery-facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.delivery-facts>div{background:#fff;border:1px solid #e8eef7;border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:3px}
+.delivery-facts small{font-size:7.5px;letter-spacing:.6px;color:#98a2b1;font-weight:800}
+.delivery-facts strong{font-size:10px;color:#344258}
+.delivery-recommendation{display:flex;align-items:flex-start;gap:10px;background:#eef5ff;border:1px solid #dbe8fb;border-radius:8px;padding:11px 13px;margin-top:13px}
+.delivery-recommendation-warn{background:#fff7e8;border-color:#f2e0b6}
+.delivery-recommendation-icon{width:28px;height:28px;min-width:28px;border-radius:8px;background:#dce8ff;color:#3f72d2;display:grid;place-items:center;font-size:12px}
+.delivery-recommendation-warn .delivery-recommendation-icon{background:#ffe9c2;color:#b07817}
+.delivery-recommendation strong{font-size:10px;color:#2f4c7e}
+.delivery-recommendation p{margin:3px 0 0;font-size:8.5px;line-height:1.55;color:#6c7f9e}
+.delivery-recommendation-price{margin-left:auto;font-size:15px;font-weight:800;color:#23406d;white-space:nowrap}
+.delivery-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:13px}
+.delivery-option{text-align:left;border:1px solid #e3eaf4;background:#fff;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:10px;transition:.15s;min-width:0}
+.delivery-option:hover:not(:disabled){border-color:#9dbaf0;box-shadow:0 4px 14px #2f67c70f;transform:translateY(-1px)}
+.delivery-option-selected{border-color:#326fe5;box-shadow:0 0 0 2px #326fe51f,0 6px 16px #2f67c714}
+.delivery-option-recommended{background:linear-gradient(180deg,#fff,#f8fbff)}
+.delivery-option-unavailable{opacity:.55;background:#fafbfd;cursor:not-allowed}
+.delivery-option-head{display:flex;align-items:flex-start;gap:8px}
+.delivery-mode-badge{width:28px;height:28px;min-width:28px;border-radius:8px;display:grid;place-items:center;font-size:12px}
+.delivery-mode-sea{background:#e2f2fa;color:#1981a8}
+.delivery-mode-air{background:#e9e7ff;color:#5f55c4}
+.delivery-mode-freight{background:#e8f6ea;color:#2c8a45}
+.delivery-option-title{display:flex;flex-direction:column;gap:2px;min-width:0}
+.delivery-option-title strong{font-size:10px;color:#29374d}
+.delivery-option-title small{font-size:8px;color:#8b97a9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.delivery-recommend-badge,.delivery-selected-badge{margin-left:auto;font-size:7px;font-weight:800;letter-spacing:.3px;border-radius:20px;padding:3px 6px;white-space:nowrap}
+.delivery-recommend-badge{background:#fff2d0;color:#9b6a12}
+.delivery-selected-badge{background:#e3f7ec;color:#1f8a59;display:flex;align-items:center;gap:3px}
+.delivery-option-stats{display:grid;grid-template-columns:1fr;gap:5px;border-top:1px solid #f0f3f8;padding-top:9px}
+.delivery-option-stats>div{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.delivery-option-stats small{font-size:7px;letter-spacing:.5px;color:#98a2b1;font-weight:800}
+.delivery-option-stats strong{font-size:8.5px;color:#3d4a5e;text-align:right}
+.delivery-option-stats>div:last-child strong{font-size:13px;color:#1f2d43}
+.delivery-option-note{font-size:7.5px;line-height:1.45;color:#7c8797;margin-top:auto;display:flex;gap:5px;align-items:flex-start}
+.delivery-option-note-warn{color:#b07817}
+.delivery-option-note .svg-inline--fa{margin-top:1px}
+.delivery-disclaimer{margin:12px 0 0;font-size:8px;line-height:1.6;color:#8b97a9}
+.delivery-disclaimer strong{color:#4c5e78}
+.delivery-receipt{margin-top:18px;padding:14px 16px;border:1px solid #dcefe4;border-radius:10px;background:#f7fdf9}
+.delivery-receipt .form-section-title{color:#7fa88f}
+.delivery-receipt-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.delivery-receipt-grid>div{display:flex;flex-direction:column;gap:4px}
+.delivery-receipt-grid small{font-size:7.5px;letter-spacing:.5px;color:#8eb09c;font-weight:800}
+.delivery-receipt-grid strong{font-size:9px;color:#2c5742}
+
+@media(max-width:850px){
+  .delivery-controls{grid-template-columns:1fr}
+  .delivery-options{grid-template-columns:1fr}
+  .delivery-receipt-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:620px){
+  .delivery-facts{grid-template-columns:1fr}
+  .delivery-receipt-grid{grid-template-columns:1fr}
+  .delivery-recommendation{flex-wrap:wrap}
+  .delivery-recommendation-price{margin-left:38px}
+}

@@ -7,6 +7,37 @@ export interface OrderItem {
   subtotal?: number;
 }
 
+export type DeliveryMode = 'SEA' | 'AIR' | 'FREIGHT';
+
+export interface DeliverySelection {
+  mode: DeliveryMode;
+  carrier: string;
+  destination: string;
+  distanceKm: number;
+  transitDays: number;
+  price: number;
+  container: string;
+}
+
+export interface DeliveryQuote extends DeliverySelection {
+  label: string;
+  available: boolean;
+  unavailableReason?: string;
+  meetsDeadline: boolean;
+  recommended: boolean;
+  capacityLabel: string;
+  note: string;
+}
+
+export interface DeliveryDestination {
+  code: string;
+  city: string;
+  region: string;
+  country: 'CA' | 'US' | 'INTL';
+  distanceKm: number;
+  seaport: boolean;
+}
+
 export interface Order {
   id: number;
   customerId: number;
@@ -17,6 +48,14 @@ export interface Order {
   dueDate?: string;
   priority?: string;
   productionStatus?: string;
+  deliveryMode?: DeliveryMode | null;
+  deliveryCarrier?: string | null;
+  deliveryDestination?: string | null;
+  deliveryDistanceKm?: number | null;
+  deliveryTransitDays?: number | null;
+  deliveryPrice?: number | null;
+  deliveryContainer?: string | null;
+  deliveredAt?: string | null;
 }
 
 export interface InventoryItem {
