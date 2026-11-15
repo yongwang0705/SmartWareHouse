@@ -66,17 +66,15 @@ interface BomTreeRowProps {
   node: BomNode;
   pathKey: string;
   depth: number;
-  stockByProduct: Map<number, number>;
   collapsed: Set<string>;
   onToggle: (key: string) => void;
 }
 
 function BomTreeRow({
-  node, pathKey, depth, stockByProduct, collapsed, onToggle,
+  node, pathKey, depth, collapsed, onToggle,
 }: BomTreeRowProps) {
   const hasChildren = node.children.length > 0;
   const open = hasChildren && !collapsed.has(pathKey);
-  const available = stockByProduct.get(node.productId);
   const type = depth === 0
     ? 'Deliverable product'
     : hasChildren ? 'Intermediate part' : 'Raw material';
@@ -110,17 +108,6 @@ function BomTreeRow({
 
         <strong className="bom-tree-qty">{node.quantity}×</strong>
 
-        <span className="bom-tree-stock">
-          {available == null ? (
-            <span className="muted-cell">Not stocked</span>
-          ) : (
-            <>
-              <span className={`bom-stock-dot ${available === 0 ? 'bom-stock-out' : available <= 20 ? 'bom-stock-low' : ''}`} />
-              {available} available
-            </>
-          )}
-        </span>
-
         <span className={`bom-type-pill bom-type-${typeClass}`}>{type}</span>
       </div>
 
@@ -132,7 +119,6 @@ function BomTreeRow({
               node={child}
               pathKey={`${pathKey}/${child.productId}`}
               depth={depth + 1}
-              stockByProduct={stockByProduct}
               collapsed={collapsed}
               onToggle={onToggle}
             />
@@ -180,14 +166,6 @@ export default function BOMPage() {
       (item) => item.isProduct === true && bomParentIds.has(item.productId),
     ),
     [inventory, bomParentIds],
-  );
-
-  const stockByProduct = useMemo(
-    () => new Map(inventory.map((item) => [
-      item.productId,
-      item.availableQuantity ?? item.quantity - item.reservedQuantity,
-    ])),
-    [inventory],
   );
 
   const forest = useMemo(() => {
@@ -301,7 +279,6 @@ export default function BOMPage() {
               <span>PRODUCT</span>
               <span>SKU</span>
               <span>QTY / UNIT</span>
-              <span>AVAILABLE STOCK</span>
               <span>TYPE</span>
             </div>
             <ul className="bom-tree">
@@ -311,7 +288,6 @@ export default function BOMPage() {
                   node={node}
                   pathKey={String(node.productId)}
                   depth={0}
-                  stockByProduct={stockByProduct}
                   collapsed={collapsed}
                   onToggle={toggle}
                 />

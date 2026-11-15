@@ -131,6 +131,17 @@ export interface CreateWarehousePlotRequest {
   occupiedUnits?: number;
 }
 
+export interface MovePlotItemsResponse {
+  source: WarehousePlot;
+  destination: WarehousePlot;
+}
+
+export interface StoreOrderAllocation {
+  plotId: number;
+  productId: number;
+  quantity: number;
+}
+
 export interface CreateOrderRequest {
   customerId: number;
   items: Array<{ productId: number; quantity: number }>;

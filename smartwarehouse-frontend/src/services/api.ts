@@ -2,10 +2,11 @@ import type {
   BOMItem, CreateOrderRequest, CreateProductionLineRequest,
   CreateWarehousePlotRequest, DeliverySelection, Employee, EmployeeShift,
   EmployeeSkill, EmployeeUnavailability, GeneratePlanRequest, InventoryItem,
-  KanbanBin, Order, PlanActionResponse, PlanDetails, PlanSummary,
-  PlanTaskRequest, ProductionBom, ProductionLine, ProductionRouting,
-  ProductionTask, ReplenishPlanRequest, RoutingOperation, Warehouse,
-  WarehousePlot, WorkCenter, WorkingCalendarEntry,
+  KanbanBin, MovePlotItemsResponse, Order, PlanActionResponse, PlanDetails,
+  PlanSummary, PlanTaskRequest, ProductionBom, ProductionLine,
+  ProductionRouting, ProductionTask, ReplenishPlanRequest, RoutingOperation,
+  StoreOrderAllocation, Warehouse, WarehousePlot, WorkCenter,
+  WorkingCalendarEntry,
 } from '../types';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
@@ -50,6 +51,8 @@ export const api = {
     post<Order>(`/api/orders/${id}/confirm`),
   completeOrder: (id: number) =>
     post<Order>(`/api/orders/${id}/complete`),
+  storeOrder: (id: number, allocations: StoreOrderAllocation[]) =>
+    post<Order>(`/api/orders/${id}/store`, { allocations }),
   shipOrder: (id: number, delivery: DeliverySelection) =>
     post<Order>(`/api/orders/${id}/ship`, delivery),
   cancelOrder: (id: number) =>
@@ -62,6 +65,27 @@ export const api = {
   getWarehouses: () => request<Warehouse[]>('/api/inventory/warehouses'),
   createWarehousePlot: (warehouseId: number, payload: CreateWarehousePlotRequest) =>
     post<WarehousePlot>(`/api/inventory/warehouses/${warehouseId}/plots`, payload),
+  updateWarehousePlot: (
+    warehouseId: number,
+    plotId: number,
+    payload: CreateWarehousePlotRequest,
+  ) => request<WarehousePlot>(
+    `/api/inventory/warehouses/${warehouseId}/plots/${plotId}`,
+    { method: 'PUT', body: JSON.stringify(payload) },
+  ),
+  deleteWarehousePlot: (warehouseId: number, plotId: number) =>
+    request<void>(
+      `/api/inventory/warehouses/${warehouseId}/plots/${plotId}`,
+      { method: 'DELETE' },
+    ),
+  moveWarehousePlotItems: (
+    warehouseId: number,
+    plotId: number,
+    payload: { destinationPlotId: number; quantity: number },
+  ) => post<MovePlotItemsResponse>(
+    `/api/inventory/warehouses/${warehouseId}/plots/${plotId}/move`,
+    payload,
+  ),
 
   // -------------------------------------------------------------------------
   // Production Planning

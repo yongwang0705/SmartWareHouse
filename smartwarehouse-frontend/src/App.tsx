@@ -9,9 +9,11 @@ import Topbar from './components/Topbar';
 import OrderModal from './components/OrderModal';
 import DeliveryPlanner, { DeliveryReceipt } from './components/DeliveryPlanner';
 import { deadlineDays } from './utils/delivery';
+import { friendlyStatus } from './utils/format';
 import { api } from './services/api';
 import type { DeliveryQuote, InventoryItem, Order } from './types';
 import DashboardPage from './pages/DashboardPage';
+import DeliveryPage from './pages/DeliveryPage';
 import ProductionPage from './pages/ProductionPage';
 import BOMPage from './pages/BOMPage';
 import InventoryPage from './pages/InventoryPage';
@@ -20,6 +22,7 @@ import WarehousesPage from './pages/WarehousesPage';
 const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   dashboard: { title: 'Overview', subtitle: 'Here is what is happening across your warehouse today.' },
   orders: { title: 'Orders', subtitle: 'Create, monitor and manage customer orders.' },
+  delivery: { title: 'Delivery', subtitle: 'Check delivery status and choose how orders are shipped.' },
   inventory: { title: 'Inventory', subtitle: 'Stock positions, reservations and JIT replenishment.' },
   warehouses: { title: 'Warehouses', subtitle: 'Physical sites, storage plots and space utilization.' },
   suppliers: { title: 'Suppliers', subtitle: 'Supplier management and procurement workspace.' },
@@ -201,10 +204,10 @@ export default function App() {
         <td>{order.items?.length ?? 0} items</td>
         <td className="quantity-cell"><strong>{(order.items ?? []).reduce((sum, item) => sum + item.quantity, 0)}</strong> units</td>
         <td className="muted-cell">{money(order.totalAmount)}</td>
-        <td><span className={`status-pill status-${statusClass(order.status || 'unknown')}`}><i />{order.status || 'UNKNOWN'}</span><div className="cell-sub">{productionLabel(order.productionStatus)}</div></td>
+        <td><span className={`status-pill status-${statusClass(order.status || 'unknown')}`}><i />{friendlyStatus(order.status || 'unknown')}</span><div className="cell-sub">{productionLabel(order.productionStatus)}</div></td>
         <td><div className="row-actions">
           <button className="row-action" title="View order" onClick={() => void openOrder(order)}><FontAwesomeIcon icon={faArrowUpRightFromSquare} /></button>
-          {order.status === 'COMPLETED' && <button className="mini-button mini-button-success" onClick={() => void openOrder(order)}>Ship</button>}
+          {['COMPLETED', 'IN_WAREHOUSE'].includes(order.status) && <button className="mini-button mini-button-success" onClick={() => void openOrder(order)}>Ship</button>}
         </div></td>
       </tr>)}
       {(!compact && filteredOrders.length === 0) && <tr><td colSpan={9}><div className="empty-state">No orders match your search.</div></td></tr>}
@@ -218,15 +221,22 @@ export default function App() {
       inventory={inventory}
       onOpenOrder={openOrder}
     />
+  ) : page === 'delivery' ? (
+    <DeliveryPage
+      orders={orders}
+      onOpenOrder={openOrder}
+      onRefresh={() => loadData(true)}
+    />
   ) : page === 'orders' ? <>
     <div className="page-toolbar"><div><h2>Order pipeline</h2><p>Review customer orders and manage their lifecycle.</p></div><button className="button button-primary" onClick={() => setShowOrderModal(true)}><FontAwesomeIcon icon={faPlus} /> Create order</button></div>
-    <div className="filter-bar"><div className="filter-tabs">{['ALL', 'CREATED', 'CONFIRMED', 'COMPLETED', 'SHIPPED', 'CANCELLED'].map((status) => <button key={status} className={statusFilter === status ? 'filter-active' : ''} onClick={() => setStatusFilter(status)}>{status === 'ALL' ? 'All orders' : status.charAt(0) + status.slice(1).toLowerCase()}</button>)}</div><span className="result-count">{filteredOrders.length} results</span></div>
+    <div className="filter-bar"><div className="filter-tabs">{['ALL', 'CREATED', 'CONFIRMED', 'COMPLETED', 'IN_WAREHOUSE', 'SHIPPED', 'CANCELLED'].map((status) => <button key={status} className={statusFilter === status ? 'filter-active' : ''} onClick={() => setStatusFilter(status)}>{status === 'ALL' ? 'All orders' : friendlyStatus(status)}</button>)}</div><span className="result-count">{filteredOrders.length} results</span></div>
     {renderOrders(false)}
   </> : page === 'inventory' ? <InventoryPage inventory={inventory} onRefreshStock={() => void loadData(true)} /> : page === 'production' ? <ProductionPage /> : page === 'bom' ? <BOMPage /> : page === 'warehouses' ? <WarehousesPage /> : <div className="coming-soon-card"><div className="coming-soon-icon"><FontAwesomeIcon icon={faTruckFast} /></div><span className="eyebrow">COMING NEXT</span><h2>Supplier management</h2><p>This section is part of the planned SmartWarehouse roadmap. The current backend exposes order and inventory operations; this module can be connected when its service is ready.</p><button className="button button-secondary" onClick={() => setPage('dashboard')}>Back to dashboard</button></div>;
 
   const selectedCanComplete = selectedOrder?.status === 'CONFIRMED'
     && ['READY', 'PRODUCTION_COMPLETED'].includes(selectedOrder.productionStatus || '');
-  const selectedCanShip = selectedOrder?.status === 'COMPLETED';
+  const selectedCanShip = selectedOrder?.status === 'COMPLETED'
+    || selectedOrder?.status === 'IN_WAREHOUSE';
   const selectedUnits = (selectedOrder?.items ?? []).reduce(
     (sum, item) => sum + Number(item.quantity || 0),
     0,
@@ -253,7 +263,7 @@ export default function App() {
           <div><small>CUSTOMER</small><strong>#{selectedOrder.customerId}</strong></div>
           <div><small>DUE DATE</small><strong>{selectedOrder.dueDate ? dateTime(selectedOrder.dueDate) : '—'}</strong></div>
           <div><small>QUANTITY</small><strong>{selectedUnits.toLocaleString('en-CA')} units</strong></div>
-          <div><small>STATUS</small><span className={`status-pill status-${statusClass(selectedOrder.status)}`}><i />{selectedOrder.status}</span></div>
+          <div><small>STATUS</small><span className={`status-pill status-${statusClass(selectedOrder.status)}`}><i />{friendlyStatus(selectedOrder.status)}</span></div>
           <div><small>PRODUCTION</small><strong>{productionLabel(selectedOrder.productionStatus)}</strong></div>
         </div>
         <h3 className="detail-section-title">Order items</h3>
@@ -266,6 +276,21 @@ export default function App() {
         <div className="detail-total"><span>Total quantity</span><strong>{selectedUnits.toLocaleString('en-CA')} units</strong></div>
         <div className="detail-value-note">Order value · {money(selectedOrder.totalAmount)}</div>
         {selectedCanShip && <DeliveryPlanner key={selectedOrder.id} order={selectedOrder} onChange={setSelectedDelivery} />}
+        {selectedOrder.status === 'COMPLETED' && (
+          <div className="plan-hint">
+            <FontAwesomeIcon icon={faCircleExclamation} />
+            <span>
+              Emergent order: you can ship directly from production. Normal orders should be placed in
+              warehouse plots from the <strong>Warehouses</strong> page first.
+            </span>
+          </div>
+        )}
+        {selectedOrder.status === 'IN_WAREHOUSE' && (
+          <div className="plan-hint">
+            <FontAwesomeIcon icon={faCircleExclamation} />
+            <span>Stored in the warehouse. Shipping will deduct inventory and release the reserved plots.</span>
+          </div>
+        )}
         {selectedOrder.deliveryMode && <DeliveryReceipt order={selectedOrder} />}
         <div className="modal-footer">
           {selectedOrder.status === 'CREATED' && <button className="button button-primary" onClick={() => void confirmOrder(selectedOrder)}>Confirm order</button>}
