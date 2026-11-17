@@ -1,12 +1,13 @@
 import type {
   BOMItem, CreateOrderRequest, CreateProductionLineRequest,
-  CreateWarehousePlotRequest, DeliverySelection, Employee, EmployeeShift,
+  CreatePurchaseOrderRequest, CreateSupplierRequest, CreateWarehousePlotRequest,
+  DeliverySelection, Employee, EmployeeShift,
   EmployeeSkill, EmployeeUnavailability, GeneratePlanRequest, InventoryItem,
   KanbanBin, MovePlotItemsResponse, Order, PlanActionResponse, PlanDetails,
   PlanSummary, PlanTaskRequest, ProductionBom, ProductionLine,
-  ProductionRouting, ProductionTask, ReplenishPlanRequest, RoutingOperation,
-  StoreOrderAllocation, Warehouse, WarehousePlot, WorkCenter,
-  WorkingCalendarEntry,
+  ProductionRouting, ProductionTask, PurchaseOrder, ReplenishPlanRequest,
+  RoutingOperation, StoreOrderAllocation, Supplier, Warehouse, WarehousePlot,
+  WorkCenter, WorkingCalendarEntry,
 } from '../types';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
@@ -86,6 +87,19 @@ export const api = {
     `/api/inventory/warehouses/${warehouseId}/plots/${plotId}/move`,
     payload,
   ),
+
+  // Suppliers and procurement
+  getSuppliers: () => request<Supplier[]>('/api/inventory/suppliers'),
+  createSupplier: (payload: CreateSupplierRequest) =>
+    post<Supplier>('/api/inventory/suppliers', payload),
+  getPurchaseOrders: () =>
+    request<PurchaseOrder[]>('/api/inventory/purchase-orders'),
+  createPurchaseOrder: (payload: CreatePurchaseOrderRequest) =>
+    post<PurchaseOrder>('/api/inventory/purchase-orders', payload),
+  receivePurchaseOrder: (orderId: number) =>
+    post<PurchaseOrder>(`/api/inventory/purchase-orders/${orderId}/receive`),
+  cancelPurchaseOrder: (orderId: number) =>
+    post<PurchaseOrder>(`/api/inventory/purchase-orders/${orderId}/cancel`),
 
   // -------------------------------------------------------------------------
   // Production Planning

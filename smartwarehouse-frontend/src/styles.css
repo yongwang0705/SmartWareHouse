@@ -612,3 +612,28 @@
 .delivery-state-arrived{background:#e9f8f0;color:#249568}
 .delivery-state-shipped{background:#edf4ff;color:#4b79c5}
 .delivery-state-neutral{background:#f1f3f6;color:#64748b}
+
+/* Supplier procurement */
+.procurement-section-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin:20px 0 10px}
+.procurement-section-head h3{font-size:13px;margin:0 0 4px;color:#243147}
+.procurement-section-head p{font-size:9px;color:#99a3b1;margin:0}
+.supplier-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:14px;margin-bottom:20px}
+.supplier-card{background:#fff;border:1px solid #e9edf3;border-radius:10px;padding:16px;box-shadow:0 2px 7px #1c2b4205;display:flex;flex-direction:column;gap:12px}
+.supplier-card-head{display:flex;align-items:center;gap:10px}
+.supplier-avatar{width:34px;height:34px;border-radius:9px;background:#eaf1ff;color:#3976e7;display:grid;place-items:center;font-size:13px;flex-shrink:0}
+.supplier-card-head strong{display:block;font-size:11px;color:#243147}
+.supplier-card-head small{display:block;font-size:8px;color:#98a2b1;margin-top:3px;letter-spacing:.4px}
+.supplier-card-head .status-pill{margin-left:auto}
+.supplier-facts{display:grid;grid-template-columns:1fr 1fr;gap:9px 12px;margin:0}
+.supplier-facts dt{font-size:7.5px;letter-spacing:.5px;color:#98a2b1;font-weight:800;text-transform:uppercase}
+.supplier-facts dd{margin:3px 0 0;font-size:9px;color:#4a586d;overflow-wrap:anywhere}
+.supplier-card-foot{border-top:1px solid #eef1f5;padding-top:10px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.supplier-card-foot>span{font-size:8px;color:#98a2b1;font-weight:700}
+.po-materials{display:flex;flex-direction:column;gap:3px;white-space:normal;max-width:280px;font-size:9px;color:#4a586d}
+.supplier-order-summary{margin-top:12px}
+.status-ordered{background:#edf4ff;color:#4b79c5}
+.status-received,.status-active{background:#e9f8f0;color:#249568}
+@media(max-width:620px){
+  .supplier-grid{grid-template-columns:1fr}
+  .procurement-section-head{flex-direction:column;align-items:flex-start}
+}

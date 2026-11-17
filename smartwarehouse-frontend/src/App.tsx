@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faArrowUpRightFromSquare, faCheck, faChevronRight,
-  faCircleExclamation, faPlus, faTruckFast,
+  faCircleExclamation, faPlus,
 } from '@fortawesome/free-solid-svg-icons';
 import Sidebar, { type Page } from './components/Sidebar';
 import Topbar from './components/Topbar';
@@ -17,6 +17,7 @@ import DeliveryPage from './pages/DeliveryPage';
 import ProductionPage from './pages/ProductionPage';
 import BOMPage from './pages/BOMPage';
 import InventoryPage from './pages/InventoryPage';
+import SuppliersPage from './pages/SuppliersPage';
 import WarehousesPage from './pages/WarehousesPage';
 
 const pageMeta: Record<Page, { title: string; subtitle: string }> = {
@@ -25,7 +26,7 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   delivery: { title: 'Delivery', subtitle: 'Check delivery status and choose how orders are shipped.' },
   inventory: { title: 'Inventory', subtitle: 'Stock positions, reservations and JIT replenishment.' },
   warehouses: { title: 'Warehouses', subtitle: 'Physical sites, storage plots and space utilization.' },
-  suppliers: { title: 'Suppliers', subtitle: 'Supplier management and procurement workspace.' },
+  suppliers: { title: 'Suppliers', subtitle: 'Buy raw materials and receive purchase orders into inventory.' },
   production: { title: 'Production', subtitle: 'Plans, Gantt schedule, resources and production routings' },
   bom: { title: 'Bill of Materials', subtitle: 'Material structure and manufacturing components' },
 };
@@ -231,7 +232,7 @@ export default function App() {
     <div className="page-toolbar"><div><h2>Order pipeline</h2><p>Review customer orders and manage their lifecycle.</p></div><button className="button button-primary" onClick={() => setShowOrderModal(true)}><FontAwesomeIcon icon={faPlus} /> Create order</button></div>
     <div className="filter-bar"><div className="filter-tabs">{['ALL', 'CREATED', 'CONFIRMED', 'COMPLETED', 'IN_WAREHOUSE', 'SHIPPED', 'CANCELLED'].map((status) => <button key={status} className={statusFilter === status ? 'filter-active' : ''} onClick={() => setStatusFilter(status)}>{status === 'ALL' ? 'All orders' : friendlyStatus(status)}</button>)}</div><span className="result-count">{filteredOrders.length} results</span></div>
     {renderOrders(false)}
-  </> : page === 'inventory' ? <InventoryPage inventory={inventory} onRefreshStock={() => void loadData(true)} /> : page === 'production' ? <ProductionPage /> : page === 'bom' ? <BOMPage /> : page === 'warehouses' ? <WarehousesPage /> : <div className="coming-soon-card"><div className="coming-soon-icon"><FontAwesomeIcon icon={faTruckFast} /></div><span className="eyebrow">COMING NEXT</span><h2>Supplier management</h2><p>This section is part of the planned SmartWarehouse roadmap. The current backend exposes order and inventory operations; this module can be connected when its service is ready.</p><button className="button button-secondary" onClick={() => setPage('dashboard')}>Back to dashboard</button></div>;
+  </> : page === 'inventory' ? <InventoryPage inventory={inventory} onRefreshStock={() => void loadData(true)} /> : page === 'production' ? <ProductionPage /> : page === 'bom' ? <BOMPage /> : page === 'warehouses' ? <WarehousesPage /> : <SuppliersPage onInventoryChanged={() => void loadData(true)} />;
 
   const selectedCanComplete = selectedOrder?.status === 'CONFIRMED'
     && ['READY', 'PRODUCTION_COMPLETED'].includes(selectedOrder.productionStatus || '');

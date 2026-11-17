@@ -158,6 +158,61 @@ export interface BOMItem {
 }
 
 // ---------------------------------------------------------------------------
+// Suppliers and purchase orders (inventory procurement)
+// ---------------------------------------------------------------------------
+
+export interface Supplier {
+  id: number;
+  code: string;
+  name: string;
+  contactName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  leadTimeDays: number;
+  status: string;
+  createdAt?: string;
+}
+
+export interface CreateSupplierRequest {
+  code: string;
+  name: string;
+  contactName?: string;
+  email?: string;
+  phone?: string;
+  leadTimeDays?: number;
+}
+
+export interface PurchaseOrderLine {
+  lineId: number;
+  productId: number;
+  productName: string;
+  isProduct?: boolean | null;
+  quantity: number;
+  receivedQuantity: number;
+}
+
+export interface PurchaseOrder {
+  id: number;
+  poNumber: string;
+  supplierId: number;
+  supplierCode: string;
+  supplierName: string;
+  status: 'ORDERED' | 'RECEIVED' | 'CANCELLED' | string;
+  expectedDelivery?: string | null;
+  createdAt: string;
+  receivedAt?: string | null;
+  orderedUnits: number;
+  receivedUnits: number;
+  lines: PurchaseOrderLine[];
+}
+
+export interface CreatePurchaseOrderRequest {
+  supplierId: number;
+  expectedDelivery?: string;
+  lines: Array<{ productId: number; quantity: number }>;
+}
+
+// ---------------------------------------------------------------------------
 // Production Planning (PPS) — mirrors the backend DTOs in
 // smartwarehouse-production-planning.
 // ---------------------------------------------------------------------------

@@ -83,6 +83,12 @@ The frontend expects the API Gateway to expose these routes:
 | GET | `/api/inventory/kanban` | JIT kanban bins with live status and age metrics |
 | GET | `/api/inventory/warehouses` | Warehouses with plots, assignments and space utilization |
 | POST | `/api/inventory/warehouses/{id}/plots` | Add a plot/bucket to a warehouse |
+| GET | `/api/inventory/suppliers` | List suppliers |
+| POST | `/api/inventory/suppliers` | Register a supplier |
+| GET | `/api/inventory/purchase-orders` | List purchase orders with material lines |
+| POST | `/api/inventory/purchase-orders` | Place a raw-material purchase order |
+| POST | `/api/inventory/purchase-orders/{id}/receive` | Receive an order and add its materials to stock |
+| POST | `/api/inventory/purchase-orders/{id}/cancel` | Cancel an ordered purchase order |
 | GET | `/api/production/plans` | List production plans |
 | POST | `/api/production/plans/generate` | Generate a draft plan |
 | POST | `/api/production/plans/replenish` | Generate a draft replenishment plan up to a target quantity |
@@ -132,4 +138,4 @@ If the browser reports a CORS error, configure CORS in the Spring Cloud API Gate
 
 ## Current scope
 
-The backend supports Orders, Inventory and Production Planning, so those sections are connected. Products are listed in the Inventory page; there is no separate Products page. The Production workspace connects to the PPS service through the API Gateway, including plans, the Gantt chart, resources and routings. Warehouses is connected to the inventory service's physical layout data; Suppliers remains a roadmap placeholder until its backend service and API are implemented. Revenue is calculated from order totals and is an operational order-value metric, not a payment or accounting ledger.
+The backend supports Orders, Inventory and Production Planning, so those sections are connected. Products are listed in the Inventory page; there is no separate Products page. The Production workspace connects to the PPS service through the API Gateway, including plans, the Gantt chart, resources and routings. Warehouses is connected to the inventory service's physical layout data; Suppliers is connected to the inventory service's supplier and purchase-order API, including goods receipt into stock. Revenue is calculated from order totals and is an operational order-value metric, not a payment or accounting ledger.
